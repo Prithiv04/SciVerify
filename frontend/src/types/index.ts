@@ -1,6 +1,15 @@
-import type { VerdictKey } from '@/constants/verdicts'
+export type {
+  UserProfile,
+  AuthState,
+  LoginFormData,
+  RegisterFormData,
+  ForgotPasswordFormData,
+  ResetPasswordFormData,
+  SignUpResult,
+  UpdateProfileInput,
+} from '@/types/auth'
 
-export type { VerdictKey }
+export type { VerdictKey } from '@/constants/verdicts'
 
 export type AgentStatus = 'idle' | 'running' | 'completed' | 'error'
 
