@@ -1,6 +1,6 @@
 import { createBrowserRouter } from 'react-router-dom'
 import RootLayout from '@/layouts/RootLayout'
-import FoundationPlaceholder from '@/routes/FoundationPlaceholder'
+import LandingPage from '@/pages/LandingPage'
 import { GuestRoute, ProtectedRoute } from '@/routes/ProtectedRoute'
 import UiPreviewPage from '@/pages/UiPreviewPage'
 import LoginPage from '@/pages/LoginPage'
@@ -13,12 +13,11 @@ import { ROUTES } from '@/constants'
 export const router = createBrowserRouter([
   {
     path: ROUTES.HOME,
+    element: <LandingPage />,
+  },
+  {
     element: <RootLayout />,
     children: [
-      {
-        index: true,
-        element: <FoundationPlaceholder />,
-      },
       {
         path: ROUTES.UI_PREVIEW,
         element: <UiPreviewPage />,
