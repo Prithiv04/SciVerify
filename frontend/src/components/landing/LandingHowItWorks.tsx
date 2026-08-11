@@ -9,15 +9,15 @@ const steps = [
   },
   {
     step: '02',
-    title: 'Agents retrieve and analyze evidence',
+    title: 'Prosecutor and Defender debate the claim',
     description:
-      'Specialized agents parse metadata, query literature, and cross-check source alignment.',
+      'One agent challenges the citation while another builds the strongest supporting case — both grounded in evidence.',
   },
   {
     step: '03',
-    title: 'Receive a structured verdict',
+    title: 'Adjudicator delivers the verdict',
     description:
-      'SciVerify returns a verdict type, confidence score, and evidence cards you can inspect.',
+      'A third agent weighs both sides and returns a verdict type, confidence score, and evidence cards you can inspect.',
   },
 ]
 
@@ -33,8 +33,8 @@ export function LandingHowItWorks() {
             How SciVerify works
           </h2>
           <p className="mt-4 max-w-2xl text-text-secondary">
-            A focused verification pipeline designed for research workflows — not
-            open-ended chat.
+            An evidence-first verification workflow where agents debate before
+            deciding — not open-ended chat.
           </p>
         </Reveal>
 

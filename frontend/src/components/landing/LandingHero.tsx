@@ -27,8 +27,8 @@ export function LandingHero() {
         <Reveal delay={200}>
           <p className="mt-6 max-w-2xl text-base leading-relaxed text-text-secondary sm:text-lg">
             SciVerify helps researchers, reviewers, and teams validate whether
-            cited claims truly match the underlying literature — using a
-            structured multi-agent pipeline, not opaque guesswork.
+            cited claims truly match the underlying literature — using specialized
+            agents that challenge, defend, and adjudicate, not opaque guesswork.
           </p>
         </Reveal>
 

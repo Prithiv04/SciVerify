@@ -37,8 +37,8 @@ export function LandingProblemSolution() {
                 <h3 className="text-lg font-semibold text-text-primary">The SciVerify approach</h3>
               </div>
               <ul className="space-y-3 text-sm leading-relaxed text-text-secondary">
-                <li>Parse claims and citations into structured verification tasks.</li>
-                <li>Retrieve and evaluate evidence from scientific literature sources.</li>
+                <li>Specialized agents challenge and defend whether a citation supports the claim.</li>
+                <li>An adjudicator weighs both perspectives against retrievable evidence.</li>
                 <li>Deliver explicit verdicts with confidence scores and source transparency.</li>
               </ul>
             </Panel>

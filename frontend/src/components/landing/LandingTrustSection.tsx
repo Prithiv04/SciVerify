@@ -66,9 +66,9 @@ export function LandingTrustSection() {
           </Reveal>
           <Reveal delay={180}>
             <StatCard
-              label="Verification agents"
+              label="Debate agents"
               value="3"
-              description="Parser, retriever, synthesizer"
+              description="Prosecutor, defender, adjudicator"
             />
           </Reveal>
           <Reveal delay={260}>
