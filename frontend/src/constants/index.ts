@@ -10,4 +10,7 @@ export const ROUTES = {
   RESET_PASSWORD: '/reset-password',
   APP: '/app',
   APP_HOME: '/app/home',
+  APP_VERIFY: '/app/verify',
+  APP_HISTORY: '/app/history',
+  APP_SETTINGS: '/app/settings',
 } as const

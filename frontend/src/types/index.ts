@@ -11,6 +11,17 @@ export type {
 
 export type { VerdictKey } from '@/constants/verdicts'
 
+export type {
+  AgentAnalysis,
+  DashboardStats,
+  EvidenceItem,
+  SourceType,
+  SuggestedCorrection,
+  VerificationFormInput,
+  VerificationRecord,
+  VerificationResult,
+} from '@/types/verification'
+
 export type AgentStatus = 'idle' | 'running' | 'completed' | 'error'
 
 export type TimelineStepStatus = 'pending' | 'active' | 'completed' | 'error'
