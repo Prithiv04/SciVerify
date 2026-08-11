@@ -1,4 +1,8 @@
+import { useState } from 'react'
+import { ArrowDown, Check, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
 import type { SuggestedCorrection } from '@/types/verification'
 
@@ -9,35 +13,93 @@ export interface SuggestedCorrectionPanelProps {
 export function SuggestedCorrectionPanel({
   correction,
 }: SuggestedCorrectionPanelProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(correction.suggestedWording)
+      setCopied(true)
+      toast.success('Correction copied to clipboard.')
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Unable to copy. Please copy the text manually.')
+    }
+  }
+
   return (
-    <Panel padding="md" className="space-y-4 border-warning/20">
+    <Panel padding="md" className="space-y-5 border-warning/20">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-lg font-semibold text-text-primary">
-          Suggested Correction
+          Suggested correction
         </h3>
-        <Badge variant="warning">Requires human approval</Badge>
+        <Badge variant="warning">Human approval required</Badge>
       </div>
+
       <p className="text-sm text-text-secondary">
-        Suggested correction — requires human approval. SciVerify does not
-        automatically modify research papers.
+        SciVerify only suggests corrections. It does not automatically modify
+        research papers or manuscripts.
       </p>
-      <div className="grid gap-4 md:grid-cols-2">
+
+      <div className="space-y-4">
         <div className="rounded-lg border border-border bg-surface p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
             Original claim
           </p>
-          <p className="mt-2 text-sm text-text-secondary">
-            {correction.originalClaim}
+          <p className="mt-2 text-sm leading-relaxed text-text-primary">
+            &ldquo;{correction.originalClaim}&rdquo;
           </p>
         </div>
+
+        <div className="flex justify-center" aria-hidden>
+          <ArrowDown className="h-4 w-4 text-text-muted" />
+        </div>
+
+        <div className="rounded-lg border border-danger/20 bg-danger/5 p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-danger">
+            Problem
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+            {correction.problem}
+          </p>
+        </div>
+
+        <div className="flex justify-center" aria-hidden>
+          <ArrowDown className="h-4 w-4 text-text-muted" />
+        </div>
+
         <div className="rounded-lg border border-primary/20 bg-primary-muted p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-primary">
-            Suggested wording
+            Suggested correction
           </p>
-          <p className="mt-2 text-sm text-text-primary">
-            {correction.suggestedWording}
+          <p className="mt-2 text-sm leading-relaxed text-text-primary">
+            &ldquo;{correction.suggestedWording}&rdquo;
           </p>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs font-medium text-warning">
+          Human approval required before using this wording in any publication.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleCopy}
+          aria-label="Copy suggested correction to clipboard"
+        >
+          {copied ? (
+            <>
+              <Check className="h-4 w-4" />
+              Copied
+            </>
+          ) : (
+            <>
+              <Copy className="h-4 w-4" />
+              Copy correction
+            </>
+          )}
+        </Button>
       </div>
     </Panel>
   )

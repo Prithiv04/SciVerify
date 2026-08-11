@@ -12,6 +12,12 @@ export const verificationFormSchema = z.object({
     .min(5, 'Please provide the citation or source.')
     .max(2000, 'Citation must be 2000 characters or fewer.'),
   sourceType: z.enum(['doi', 'url', 'citation', 'reference']),
+  context: z
+    .string()
+    .trim()
+    .max(500, 'Context must be 500 characters or fewer.')
+    .optional()
+    .or(z.literal('')),
 })
 
 export type VerificationFormSchema = z.infer<typeof verificationFormSchema>

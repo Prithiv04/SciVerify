@@ -51,11 +51,7 @@ export default function AppHomePage() {
         <StatCard label="Supported" value={stats.supports} />
         <StatCard label="Overstated" value={stats.overstated} />
         <StatCard label="Contradicted" value={stats.contradicts} />
-        <StatCard
-          label="Unclear"
-          value={stats.insufficient + stats.fabricated}
-          description="Insufficient or fabricated"
-        />
+        <StatCard label="Fabricated" value={stats.fabricated} />
       </div>
 
       <section className="mt-10">
@@ -72,12 +68,10 @@ export default function AppHomePage() {
         </div>
 
         {recentRecords.length === 0 ? (
-          <Panel padding="lg" className="text-center">
-            <p className="text-sm text-text-secondary">
-              No verification records yet. Start your first citation check.
-            </p>
-            <Link to={ROUTES.APP_VERIFY} className="mt-4 inline-block">
-              <Button>New Verification</Button>
+          <Panel padding="lg" className="space-y-4 text-center">
+            <p className="text-sm text-text-secondary">No verifications yet.</p>
+            <Link to={ROUTES.APP_VERIFY} className="inline-block">
+              <Button>Start your first verification</Button>
             </Link>
           </Panel>
         ) : (

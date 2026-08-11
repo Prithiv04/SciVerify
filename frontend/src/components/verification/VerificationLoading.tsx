@@ -1,50 +1,168 @@
-import { Spinner } from '@/components/ui/Spinner'
+import { Scale, Shield, Swords } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { AgentCard } from '@/components/sciverify/AgentCard'
+import { ProgressStep } from '@/components/sciverify/ProgressStep'
 import { Panel } from '@/components/ui/Card'
-import { VerificationTimeline } from '@/components/sciverify/VerificationTimeline'
-import type { TimelineStepStatus } from '@/types'
+import { VERIFICATION_STAGES } from '@/mocks/verification'
+import type { AgentStatus } from '@/types'
 
 export interface VerificationLoadingProps {
-  currentStep: string
-  stepIndex: number
+  stageIndex: number
+  message?: string
 }
 
-const timelineLabels = [
-  'Analyze citation',
-  'Check source',
-  'Review evidence',
-  'Run agent debate',
-  'Prepare verdict',
-]
+const agentMeta = {
+  prosecutor: {
+    name: 'Prosecutor',
+    role: 'Challenge the claim',
+    icon: Swords,
+    waitingMessage: 'Waiting for evidence...',
+  },
+  defender: {
+    name: 'Defender',
+    role: 'Build the strongest supporting case',
+    icon: Shield,
+    waitingMessage: 'Waiting for evidence...',
+  },
+  adjudicator: {
+    name: 'Adjudicator',
+    role: 'Make the final evidence-backed decision',
+    icon: Scale,
+    waitingMessage: 'Waiting for arguments...',
+  },
+} as const
+
+function getAgentStatus(
+  agent: 'prosecutor' | 'defender' | 'adjudicator',
+  stageIndex: number,
+): AgentStatus {
+  const agentStageIndex = VERIFICATION_STAGES.findIndex(
+    (stage) => stage.agent === agent,
+  )
+
+  if (stageIndex > agentStageIndex) return 'completed'
+  if (stageIndex === agentStageIndex) return 'running'
+  return 'idle'
+}
+
+function getAgentDescription(
+  agent: 'prosecutor' | 'defender' | 'adjudicator',
+  stageIndex: number,
+  message?: string,
+): string {
+  const meta = agentMeta[agent]
+  const status = getAgentStatus(agent, stageIndex)
+
+  if (status === 'running') {
+    return message ?? VERIFICATION_STAGES[stageIndex]?.activeMessage ?? meta.role
+  }
+  if (status === 'completed') {
+    return 'Analysis completed.'
+  }
+  return meta.waitingMessage
+}
 
 export function VerificationLoading({
-  currentStep,
-  stepIndex,
+  stageIndex,
+  message,
 }: VerificationLoadingProps) {
-  const items = timelineLabels.map((title, index) => {
-    let status: TimelineStepStatus = 'pending'
-    if (index < stepIndex) status = 'completed'
-    if (index === stepIndex) status = 'active'
-
-    return {
-      id: String(index),
-      title,
-      description: index === stepIndex ? currentStep : undefined,
-      status,
-    }
-  })
+  const pipelineStages = VERIFICATION_STAGES.filter(
+    (stage) => stage.group === 'pipeline',
+  )
+  const currentStage = VERIFICATION_STAGES[stageIndex]
 
   return (
     <div className="space-y-6">
-      <Panel padding="md" className="flex items-center gap-4">
-        <Spinner size="lg" className="text-primary" />
-        <div>
-          <p className="font-medium text-text-primary">{currentStep}</p>
-          <p className="text-sm text-text-secondary">
-            Simulated verification progress for demo purposes.
-          </p>
-        </div>
+      <Panel padding="md" className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+          Verifying citation
+        </p>
+        <p className="text-sm text-text-secondary">
+          {message ?? currentStage?.title ?? 'Processing verification pipeline...'}
+        </p>
       </Panel>
-      <VerificationTimeline items={items} />
+
+      <Panel padding="md" className="space-y-1">
+        {pipelineStages.map((stage, index) => {
+          const stagePosition = VERIFICATION_STAGES.findIndex(
+            (item) => item.id === stage.id,
+          )
+          let status: 'pending' | 'active' | 'completed' = 'pending'
+          if (stageIndex > stagePosition) status = 'completed'
+          if (stageIndex === stagePosition) status = 'active'
+
+          return (
+            <ProgressStep
+              key={stage.id}
+              step={index + 1}
+              title={stage.title}
+              description={
+                status === 'active'
+                  ? message ?? stage.activeMessage ?? stage.title
+                  : undefined
+              }
+              status={status}
+              isLast={index === pipelineStages.length - 1}
+            />
+          )
+        })}
+      </Panel>
+
+      <div className="space-y-4">
+        <p className="text-center text-xs font-semibold uppercase tracking-widest text-text-muted">
+          Agent debate
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+          <AgentCard
+            name={agentMeta.prosecutor.name}
+            role={agentMeta.prosecutor.role}
+            status={getAgentStatus('prosecutor', stageIndex)}
+            description={getAgentDescription('prosecutor', stageIndex, message)}
+            className={cn(
+              getAgentStatus('prosecutor', stageIndex) === 'running' &&
+                'ring-1 ring-primary/40',
+            )}
+          />
+          <p
+            className="hidden text-center text-sm font-semibold text-text-muted md:block"
+            aria-hidden
+          >
+            VS
+          </p>
+          <AgentCard
+            name={agentMeta.defender.name}
+            role={agentMeta.defender.role}
+            status={getAgentStatus('defender', stageIndex)}
+            description={getAgentDescription('defender', stageIndex, message)}
+            className={cn(
+              getAgentStatus('defender', stageIndex) === 'running' &&
+                'ring-1 ring-primary/40',
+            )}
+          />
+        </div>
+
+        <p className="text-center text-lg text-text-muted" aria-hidden>
+          ↓
+        </p>
+
+        <AgentCard
+          name={agentMeta.adjudicator.name}
+          role={agentMeta.adjudicator.role}
+          status={getAgentStatus('adjudicator', stageIndex)}
+          description={getAgentDescription('adjudicator', stageIndex, message)}
+          className={cn(
+            getAgentStatus('adjudicator', stageIndex) === 'running' &&
+              'ring-1 ring-primary/40',
+          )}
+        />
+      </div>
+
+      {stageIndex >= VERIFICATION_STAGES.length - 1 ? (
+        <Panel padding="md" className="text-sm text-text-secondary">
+          Generating final verdict...
+        </Panel>
+      ) : null}
     </div>
   )
 }

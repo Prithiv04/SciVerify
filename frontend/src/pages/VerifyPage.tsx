@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { AppHeader } from '@/components/app/AppHeader'
 import { VerificationForm } from '@/components/verification/VerificationForm'
 import { VerificationLoading } from '@/components/verification/VerificationLoading'
 import { VerificationResultView } from '@/components/verification/VerificationResultView'
-import { VERIFICATION_LOADING_STEPS } from '@/mocks/verification'
 import { verifyCitationMock } from '@/services/mockVerificationService'
 import { useVerificationStore } from '@/stores/verificationStore'
 import { ROUTES } from '@/constants'
@@ -32,34 +31,29 @@ export default function VerifyPage() {
   const [result, setResult] = useState<VerificationResult | null>(
     initialRecord ?? null,
   )
-  const [loadingStep, setLoadingStep] = useState<string>(
-    VERIFICATION_LOADING_STEPS[0],
-  )
-  const [loadingIndex, setLoadingIndex] = useState(0)
+  const [loadingStageIndex, setLoadingStageIndex] = useState(0)
+  const [loadingMessage, setLoadingMessage] = useState<string>()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-
-  const stepIndex = useMemo(
-    () =>
-      Math.max(
-        0,
-        VERIFICATION_LOADING_STEPS.findIndex((step) => step === loadingStep),
-      ),
-    [loadingStep],
-  )
 
   const handleSubmit = async (values: VerificationFormSchema) => {
     setPhase('loading')
     setErrorMessage(null)
-    setLoadingStep(VERIFICATION_LOADING_STEPS[0])
-    setLoadingIndex(0)
+    setLoadingStageIndex(0)
+    setLoadingMessage(undefined)
 
     try {
-      const verificationResult = await verifyCitationMock(values, (step) => {
-        setLoadingStep(step)
-        setLoadingIndex(
-          VERIFICATION_LOADING_STEPS.findIndex((item) => item === step),
-        )
-      })
+      const verificationResult = await verifyCitationMock(
+        {
+          claim: values.claim,
+          citation: values.citation,
+          sourceType: values.sourceType,
+          context: values.context,
+        },
+        (update) => {
+          setLoadingStageIndex(update.stageIndex)
+          setLoadingMessage(update.message)
+        },
+      )
 
       addRecord(verificationResult)
       setResult(verificationResult)
@@ -68,9 +62,11 @@ export default function VerifyPage() {
     } catch (error) {
       setPhase('error')
       setErrorMessage(
-        error instanceof Error ? error.message : 'Verification failed.',
+        error instanceof Error
+          ? error.message
+          : 'Verification could not be completed.',
       )
-      toast.error('Mock verification failed.')
+      toast.error('Verification could not be completed.')
     }
   }
 
@@ -101,19 +97,24 @@ export default function VerifyPage() {
 
       {phase === 'loading' ? (
         <VerificationLoading
-          currentStep={loadingStep}
-          stepIndex={loadingIndex >= 0 ? loadingIndex : stepIndex}
+          stageIndex={loadingStageIndex}
+          message={loadingMessage}
         />
       ) : null}
 
       {phase === 'error' ? (
         <Panel padding="md" className="space-y-4 border-danger/30">
+          <p className="font-medium text-text-primary">
+            Verification could not be completed.
+          </p>
           <p className="text-sm text-danger">{errorMessage}</p>
           <Button onClick={() => setPhase('form')}>Try again</Button>
         </Panel>
       ) : null}
 
-      {phase === 'result' && result ? <VerificationResultView result={result} /> : null}
+      {phase === 'result' && result ? (
+        <VerificationResultView result={result} />
+      ) : null}
     </div>
   )
 }

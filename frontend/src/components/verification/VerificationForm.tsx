@@ -33,6 +33,7 @@ export function VerificationForm({ onSubmit, loading = false }: VerificationForm
       claim: '',
       citation: '',
       sourceType: 'doi' as SourceType,
+      context: '',
     },
   })
 
@@ -40,11 +41,12 @@ export function VerificationForm({ onSubmit, loading = false }: VerificationForm
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       <Panel padding="md" className="space-y-4">
         <Textarea
-          label="Scientific Claim"
-          placeholder="Example: The proposed method improves model accuracy by 20% on real-world datasets."
+          label="Scientific claim"
+          placeholder='Example: "AI improves software development productivity."'
           hint="Enter the exact claim you want to verify."
-          rows={4}
+          rows={5}
           error={errors.claim?.message}
+          disabled={loading}
           {...register('claim')}
         />
       </Panel>
@@ -54,23 +56,40 @@ export function VerificationForm({ onSubmit, loading = false }: VerificationForm
           label="Source type"
           options={sourceTypeOptions}
           error={errors.sourceType?.message}
+          disabled={loading}
           {...register('sourceType')}
         />
         <Textarea
-          label="Citation / Source"
-          placeholder="Paste a DOI, URL, citation, or reference."
-          hint="Provide the citation that supposedly supports the claim."
+          label="Citation / DOI"
+          placeholder="Example: 10.1145/example or paste a full citation string."
+          hint="Provide the DOI, citation, or paper identifier that supposedly supports the claim."
           rows={3}
           error={errors.citation?.message}
+          disabled={loading}
           {...register('citation')}
+        />
+        <Textarea
+          label="Optional context"
+          placeholder="Section, paragraph, or experimental conditions (optional)."
+          hint="Add brief context if it helps interpret the claim."
+          rows={2}
+          error={errors.context?.message}
+          disabled={loading}
+          {...register('context')}
         />
       </Panel>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-text-muted">
-          Demo workflow — mock verification only. No real AI or external APIs are called.
+          Demo workflow — mock verification only. No real AI or external APIs are
+          called.
         </p>
-        <Button type="submit" loading={loading} className="w-full sm:w-auto">
+        <Button
+          type="submit"
+          loading={loading}
+          disabled={loading}
+          className="w-full sm:w-auto"
+        >
           {loading ? 'Verifying...' : 'Verify Citation'}
         </Button>
       </div>

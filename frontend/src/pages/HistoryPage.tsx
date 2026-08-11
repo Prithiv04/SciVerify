@@ -68,12 +68,17 @@ export default function HistoryPage() {
       </div>
 
       {filteredRecords.length === 0 ? (
-        <Panel padding="lg" className="text-center">
+        <Panel padding="lg" className="space-y-4 text-center">
           <p className="text-sm text-text-secondary">
             {records.length === 0
-              ? 'No verification history yet.'
+              ? 'No verifications yet.'
               : 'No records match your search or filter.'}
           </p>
+          {records.length === 0 ? (
+            <Link to={ROUTES.APP_VERIFY}>
+              <Button>Start your first verification</Button>
+            </Link>
+          ) : null}
         </Panel>
       ) : (
         <div className="space-y-4">
@@ -89,6 +94,9 @@ export default function HistoryPage() {
                   </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <VerdictBadge verdict={record.verdict} size="sm" />
+                    <span className="text-xs font-medium text-text-primary">
+                      {record.confidence}%
+                    </span>
                     <span className="text-xs text-text-muted">
                       {formatDate(record.createdAt)}
                     </span>

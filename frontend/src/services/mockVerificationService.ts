@@ -1,26 +1,32 @@
 import {
-  VERIFICATION_LOADING_STEPS,
+  VERIFICATION_STAGES,
   buildMockVerificationResult,
 } from '@/mocks/verification'
 import type {
   VerificationFormInput,
+  VerificationProgressUpdate,
   VerificationResult,
 } from '@/types/verification'
 
-const MOCK_DELAY_MS = 1800
-const STEP_INTERVAL_MS = MOCK_DELAY_MS / VERIFICATION_LOADING_STEPS.length
+const MOCK_DELAY_MS = 3500
+const STEP_INTERVAL_MS = MOCK_DELAY_MS / VERIFICATION_STAGES.length
 
 export async function verifyCitationMock(
   input: VerificationFormInput,
-  onProgress?: (step: string) => void,
+  onProgress?: (update: VerificationProgressUpdate) => void,
 ): Promise<VerificationResult> {
-  for (const step of VERIFICATION_LOADING_STEPS) {
-    onProgress?.(step)
+  for (let index = 0; index < VERIFICATION_STAGES.length; index += 1) {
+    const stage = VERIFICATION_STAGES[index]
+    onProgress?.({
+      stageId: stage.id,
+      stageIndex: index,
+      message: stage.activeMessage ?? stage.title,
+    })
     await delay(STEP_INTERVAL_MS)
   }
 
   if (input.claim.toLowerCase().includes('fail')) {
-    throw new Error('Mock verification failed. Please try again.')
+    throw new Error('Verification could not be completed. Please try again.')
   }
 
   return buildMockVerificationResult(input)
