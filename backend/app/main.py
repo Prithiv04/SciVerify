@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes.citations import router as citations_router
+from app.api.routes.papers import router as papers_router
 
 load_dotenv()
 
@@ -27,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(citations_router)
+app.include_router(papers_router)
 
 
 @app.get("/api/health")

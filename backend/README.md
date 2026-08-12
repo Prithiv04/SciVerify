@@ -8,7 +8,8 @@ FastAPI backend for the SciVerify evidence-backed citation verification platform
 |-----------|--------|-------------|
 | 1 | Complete | FastAPI scaffold, health check, CORS |
 | 2 | Complete | DOI citation resolver (Crossref → OpenAlex) |
-| 3+ | Planned | Paper retrieval, evidence, agents, persistence |
+| 3 | Complete | Paper metadata & content retrieval, evidence chunking |
+| 4+ | Planned | Evidence ranking, agents, persistence |
 
 ## Prerequisites
 
@@ -136,6 +137,83 @@ curl -X POST http://127.0.0.1:8001/api/citations/resolve \
 | 404 | Citation not found in Crossref or OpenAlex |
 | 503 | External provider failure (timeout, unavailable) |
 
+## Paper retrieval (Milestone 3)
+
+`POST /api/papers/retrieve` resolves a DOI, discovers publicly accessible full text when available, parses the document, and returns evidence-ready chunks.
+
+**This endpoint prepares evidence for later verification. It does NOT verify scientific claims.**
+
+### Retrieval flow
+
+1. Normalize the DOI and resolve citation metadata via the existing citation resolver
+2. Enrich metadata from **OpenAlex** (abstract, open-access locations)
+3. Discover the best publicly accessible **PDF or HTML** source (no paywall bypass)
+4. Download, parse, clean, and chunk the document when full text is accessible
+5. Return normalized paper metadata, sections, and evidence chunks
+
+If full text is unavailable, the API still returns metadata with `full_text_available: false` and status `full_text_unavailable`.
+
+### Example request
+
+```bash
+curl -X POST http://127.0.0.1:8001/api/papers/retrieve \
+  -H "Content-Type: application/json" \
+  -d "{\"doi\": \"10.1038/s41586-020-2649-2\"}"
+```
+
+### Example response (metadata only)
+
+```json
+{
+  "status": "full_text_unavailable",
+  "paper": {
+    "paper_id": "10.1038/s41586-020-2649-2",
+    "doi": "10.1038/s41586-020-2649-2",
+    "title": "Example Paper Title",
+    "authors": ["Ada Lovelace"],
+    "abstract": "Example abstract text.",
+    "journal": "Nature",
+    "publisher": "Nature Publishing Group",
+    "publication_date": "2020-05-28",
+    "year": 2020,
+    "url": "https://doi.org/10.1038/s41586-020-2649-2",
+    "source_url": "https://example.org/landing",
+    "open_access": false,
+    "full_text_available": false,
+    "full_text_format": null,
+    "full_text_url": null
+  },
+  "sections": [],
+  "chunks": [],
+  "source": {
+    "url": "https://openalex.org/W123",
+    "provider": "openalex"
+  }
+}
+```
+
+### Supported document formats
+
+| Format | Parser |
+|--------|--------|
+| PDF | `pypdf` text extraction with section heuristics |
+| HTML | `beautifulsoup4` heading-based section detection |
+
+### Chunking behavior
+
+- Section-aware chunking (Abstract, Introduction, Methods, Results, etc.)
+- Configurable via `CHUNK_SIZE` (default 1000) and `CHUNK_OVERLAP` (default 200)
+- Each chunk retains `paper_id`, section name, index, and source URL
+
+### Paper retrieval HTTP status codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Paper metadata returned (including metadata-only / unavailable full text) |
+| 400 | Invalid DOI |
+| 404 | Paper not found |
+| 503 | External provider or document download failure |
+
 ## Tests
 
 All external HTTP calls are mocked in tests.
@@ -151,7 +229,7 @@ The backend allows requests from the Vite frontend origin configured in `FRONTEN
 
 ## Frontend integration
 
-The React app continues to use **mock verification** for `/app/verify`. The citation resolver is backend-only in Milestone 2 and is not wired to the verification UI yet.
+The React app continues to use **mock verification** for `/app/verify`. Milestone 3 adds backend paper retrieval only; the verification UI is not wired to this endpoint yet.
 
 ## Security
 
