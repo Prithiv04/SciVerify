@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
+import { getVerdictConfig, type VerdictKey } from '@/constants/verdicts'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 
 export interface StatCardProps {
   label: string
@@ -8,6 +9,7 @@ export interface StatCardProps {
   description?: string
   trend?: string
   icon?: ReactNode
+  accent?: VerdictKey | 'total'
   className?: string
 }
 
@@ -17,15 +19,19 @@ export function StatCard({
   description,
   trend,
   icon,
+  accent = 'total',
   className,
 }: StatCardProps) {
   const hasFooter = Boolean(description || trend)
+  const accentConfig =
+    accent === 'total' ? null : getVerdictConfig(accent)
 
   return (
     <Card
       className={cn(
         'flex h-full min-h-[8.5rem] flex-col transition-all duration-200 motion-reduce:transition-none',
         'hover:-translate-y-0.5 hover:border-border/80 hover:shadow-md motion-reduce:hover:translate-y-0',
+        accentConfig?.borderClass,
         className,
       )}
     >
@@ -35,15 +41,22 @@ export function StatCard({
           hasFooter ? 'pb-0' : 'pb-5',
         )}
       >
-        <div className="flex items-start justify-between gap-3">
-          <CardDescription className="min-h-[2.75rem] flex-1 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            {label}
-          </CardDescription>
+        <div className="flex min-h-[2.75rem] items-start gap-2.5">
           {icon ? (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-surface-elevated text-primary">
+            <span
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-surface-elevated',
+                accentConfig
+                  ? cn(accentConfig.borderClass, accentConfig.textClass)
+                  : 'border-border/80 text-primary',
+              )}
+            >
               {icon}
             </span>
           ) : null}
+          <p className="pt-1 text-xs font-semibold uppercase leading-snug tracking-wide text-text-muted">
+            {label}
+          </p>
         </div>
         <CardTitle className="mt-4 text-3xl font-semibold tabular-nums leading-none tracking-tight text-text-primary">
           {value}

@@ -5,6 +5,10 @@ export interface AppHeaderProps {
   title: string
   description?: string
   eyebrow?: string
+  status?: {
+    label: string
+    ready?: boolean
+  }
   actions?: ReactNode
   className?: string
 }
@@ -13,6 +17,7 @@ export function AppHeader({
   title,
   description,
   eyebrow,
+  status,
   actions,
   className,
 }: AppHeaderProps) {
@@ -35,6 +40,18 @@ export function AppHeader({
         {description ? (
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary sm:text-base">
             {description}
+          </p>
+        ) : null}
+        {status ? (
+          <p className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-text-secondary">
+            <span
+              className={cn(
+                'h-2 w-2 rounded-full',
+                status.ready === false ? 'bg-warning' : 'bg-success',
+              )}
+              aria-hidden
+            />
+            {status.label}
           </p>
         ) : null}
       </div>

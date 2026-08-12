@@ -18,10 +18,42 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
+function normalize(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function getSourceLines(record: VerificationResult): string[] {
+  const primaryEvidence = record.evidence[0]
+
+  if (primaryEvidence) {
+    const lines: string[] = []
+
+    if (primaryEvidence.identifier?.trim()) {
+      lines.push(primaryEvidence.identifier.trim())
+    }
+
+    if (primaryEvidence.title?.trim()) {
+      const title = primaryEvidence.title.trim()
+      const isDuplicate = lines.some((line) => normalize(line) === normalize(title))
+      if (!isDuplicate) {
+        lines.push(title)
+      }
+    }
+
+    if (lines.length > 0) {
+      return lines
+    }
+  }
+
+  return [record.citation.trim()]
+}
+
 export function VerificationActivityCard({
   record,
   className,
 }: VerificationActivityCardProps) {
+  const sourceLines = getSourceLines(record)
+
   return (
     <Card
       className={cn(
@@ -33,18 +65,30 @@ export function VerificationActivityCard({
       <CardHeader className="space-y-4 p-5 pb-0">
         <div className="flex items-start justify-between gap-4">
           <VerdictBadge verdict={record.verdict} size="sm" />
-          <span className="text-sm font-semibold tabular-nums text-text-primary">
+          <span className="text-base font-semibold tabular-nums text-text-primary">
             {record.confidence}%
           </span>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="line-clamp-2 text-sm font-medium leading-relaxed text-text-primary">
             {record.claim}
           </p>
-          <p className="line-clamp-1 font-mono text-xs text-text-muted">
-            {record.citation}
-          </p>
+          <div className="space-y-1 border-l-2 border-border/80 pl-3">
+            {sourceLines.map((line) => (
+              <p
+                key={`${record.id}-${line}`}
+                className={cn(
+                  'line-clamp-2 text-xs leading-relaxed',
+                  record.evidence[0]?.identifier?.trim() === line
+                    ? 'font-mono text-text-muted'
+                    : 'text-text-secondary',
+                )}
+              >
+                {line}
+              </p>
+            ))}
+          </div>
         </div>
       </CardHeader>
 
