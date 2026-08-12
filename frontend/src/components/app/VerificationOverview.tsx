@@ -3,7 +3,6 @@ import { computeVerificationSummary } from '@/lib/dashboard-selectors'
 import { getVerdictConfig, VERDICT_KEYS } from '@/constants/verdicts'
 import type { VerdictKey } from '@/constants/verdicts'
 import type { DashboardStats, VerificationResult } from '@/types/verification'
-import { Divider } from '@/components/ui/Divider'
 import { Panel } from '@/components/ui/Card'
 
 export interface VerificationOverviewProps {
@@ -37,7 +36,7 @@ export function VerificationOverview({
   const summary = computeVerificationSummary(stats, records)
 
   return (
-    <Panel padding="lg" className={cn(className)}>
+    <Panel padding="lg" className={cn('w-full', className)}>
       <div>
         <h2 className="text-sm font-semibold text-text-primary">
           Verification overview
@@ -47,7 +46,7 @@ export function VerificationOverview({
         </p>
       </div>
 
-      <div className="mt-5 space-y-3">
+      <div className="mt-5 space-y-3.5">
         {VERDICT_KEYS.map((key) => {
           const config = getVerdictConfig(key)
           const count = counts[key]
@@ -93,16 +92,16 @@ export function VerificationOverview({
 
       {stats.total === 0 ? (
         <p className="mt-4 text-xs text-text-muted">
-          No verification runs yet. Start your first check to populate this overview.
+          No verification runs yet. Start your first check to populate this
+          overview.
         </p>
       ) : null}
 
-      <div className="pt-5">
-        <Divider className="mb-4" />
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+      <div className="mt-7 border-t border-border/70 pt-5">
+        <h3 className="text-sm font-semibold text-text-primary">
           Verification summary
         </h3>
-        <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-2">
+        <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_2.5rem] gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr)_3rem]">
           {summaryRows.map((row) => (
             <div key={row.key} className="contents">
               <dt className="text-xs text-text-secondary">{row.label}</dt>

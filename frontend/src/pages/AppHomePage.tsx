@@ -103,22 +103,31 @@ export default function AppHomePage() {
       </section>
 
       <section
-        className="grid gap-4 lg:grid-cols-2 lg:items-start"
-        aria-label="Verification overview and workflow"
+        className="grid grid-cols-1 gap-5 lg:grid-cols-2 lg:items-start"
+        aria-label="Verification overview, workflow, needs review, and workspace insights"
       >
-        <VerificationOverview stats={stats} records={records} />
-        <VerificationWorkflowCta />
-      </section>
-
-      <section
-        className="grid gap-4 lg:grid-cols-2 lg:items-stretch"
-        aria-label="Needs review and workspace insights"
-      >
-        <NeedsReviewSection
-          records={records}
-          needsReviewRecords={needsReviewRecords}
-        />
-        <WorkspaceInsights records={records} stats={stats} />
+        <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-5">
+          <VerificationOverview
+            stats={stats}
+            records={records}
+            className="order-1"
+          />
+          <NeedsReviewSection
+            records={records}
+            needsReviewRecords={needsReviewRecords}
+            className="order-3 lg:order-none"
+          />
+        </div>
+        <div className="contents lg:flex lg:min-w-0 lg:flex-col lg:gap-5">
+          <div className="order-2 contents lg:contents">
+            <VerificationWorkflowCta />
+          </div>
+          <WorkspaceInsights
+            records={records}
+            stats={stats}
+            className="order-4 lg:order-none"
+          />
+        </div>
       </section>
 
       <section aria-label="Recent verification activity">
