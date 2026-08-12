@@ -2,7 +2,13 @@
 
 FastAPI backend for the SciVerify evidence-backed citation verification platform.
 
-Phase 6 Milestone 1 provides the initial server scaffold and health check only. Verification, citation resolution, and agent pipelines are implemented in later milestones.
+## Milestones
+
+| Milestone | Status | Description |
+|-----------|--------|-------------|
+| 1 | Complete | FastAPI scaffold, health check, CORS |
+| 2 | Complete | DOI citation resolver (Crossref → OpenAlex) |
+| 3+ | Planned | Paper retrieval, evidence, agents, persistence |
 
 ## Prerequisites
 
@@ -39,7 +45,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Copy environment placeholders (optional for Milestone 1):
+Copy environment placeholders (optional):
 
 ```bash
 copy .env.example .env
@@ -56,29 +62,21 @@ cp .env.example .env
 With the virtual environment activated, from the `backend/` directory:
 
 ```bash
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-Or use values from `.env`:
-
-```bash
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Default host/port match `BACKEND_HOST` / `BACKEND_PORT` in `.env.example`.
-
-## Local URLs
+Default development URLs:
 
 | URL | Description |
 |-----|-------------|
-| http://localhost:8000 | API root (FastAPI) |
-| http://localhost:8000/api/health | Health check |
-| http://localhost:8000/docs | Swagger UI (auto-generated) |
+| http://127.0.0.1:8001 | API root |
+| http://127.0.0.1:8001/api/health | Health check |
+| http://127.0.0.1:8001/docs | Swagger UI |
 
 ## Health check
 
 ```bash
-curl http://localhost:8000/api/health
+curl http://127.0.0.1:8001/api/health
 ```
 
 Expected response:
@@ -90,15 +88,70 @@ Expected response:
 }
 ```
 
+## Citation resolver (Milestone 2)
+
+`POST /api/citations/resolve` resolves a DOI to normalized paper metadata.
+
+**This endpoint only resolves citation metadata. It does NOT verify scientific claims.**
+
+### Resolution flow
+
+1. Normalize the DOI input (raw DOI, `doi:` prefix, or `doi.org` URL)
+2. Query **Crossref** (`GET /works/{doi}`)
+3. If Crossref cannot resolve usable metadata, fall back to **OpenAlex**
+4. Return a consistent internal `CitationMetadata` structure
+
+No API keys are required for Crossref or OpenAlex public metadata endpoints.
+
+### Example request
+
+```bash
+curl -X POST http://127.0.0.1:8001/api/citations/resolve \
+  -H "Content-Type: application/json" \
+  -d "{\"doi\": \"10.1038/s41586-020-2649-2\"}"
+```
+
+### Example response
+
+```json
+{
+  "doi": "10.1038/s41586-020-2649-2",
+  "title": "Example Paper Title",
+  "authors": ["Ada Lovelace", "Alan Turing"],
+  "journal": "Nature",
+  "publisher": "Nature Publishing Group",
+  "year": 2020,
+  "url": "https://doi.org/10.1038/s41586-020-2649-2",
+  "source": "crossref",
+  "type": "journal-article"
+}
+```
+
+### HTTP status codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Citation resolved |
+| 400 | Invalid DOI |
+| 404 | Citation not found in Crossref or OpenAlex |
+| 503 | External provider failure (timeout, unavailable) |
+
+## Tests
+
+All external HTTP calls are mocked in tests.
+
+```bash
+cd backend
+python -m pytest
+```
+
 ## CORS
 
 The backend allows requests from the Vite frontend origin configured in `FRONTEND_URL` (default `http://localhost:5173`).
 
-Do not set `allow_origins=["*"]` in production. Add additional origins via environment configuration when needed.
-
 ## Frontend integration
 
-The React app reads `VITE_API_BASE_URL` (see `frontend/.env.example`). Milestone 1 does not wire verification calls to this backend yet; the frontend continues to use the mock verification service.
+The React app continues to use **mock verification** for `/app/verify`. The citation resolver is backend-only in Milestone 2 and is not wired to the verification UI yet.
 
 ## Security
 

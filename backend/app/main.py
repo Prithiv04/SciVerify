@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.citations import router as citations_router
+
 load_dotenv()
 
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
@@ -23,6 +25,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+app.include_router(citations_router)
 
 
 @app.get("/api/health")
