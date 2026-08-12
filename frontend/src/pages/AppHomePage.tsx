@@ -33,19 +33,18 @@ export default function AppHomePage() {
   const records = useVerificationStore((state) => state.records)
   const stats = computeDashboardStats(records)
   const recentRecords = getRecentRecords(records)
-  const needsReviewRecords = getNeedsReviewRecords(records)
+  const needsReviewRecords = getNeedsReviewRecords(records, 10)
   const mostRecentRecord = getMostRecentRecord(records)
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       <AppHeader
         title={`Welcome back, ${displayName}`}
         description="Evidence-backed verification for your scientific claims."
-        status={{ label: 'Verification system ready', ready: true }}
         actions={
-          <Link to={ROUTES.APP_VERIFY}>
-            <Button>
-              <Plus className="h-4 w-4" />
+          <Link to={ROUTES.APP_VERIFY} className="w-full sm:w-auto">
+            <Button className="h-10 w-full sm:w-auto">
+              <Plus className="h-4 w-4" aria-hidden />
               New Verification
             </Button>
           </Link>
@@ -63,48 +62,48 @@ export default function AppHomePage() {
             value={stats.total}
             description="All verification runs"
             accent="total"
-            icon={<ClipboardList className="h-4 w-4" />}
+            icon={<ClipboardList className="h-4 w-4" aria-hidden />}
           />
           <StatCard
-            label="Supported"
+            label="Supports"
             value={stats.supports}
             description="Evidence aligned"
             accent="SUPPORTS"
-            icon={<CheckCircle2 className="h-4 w-4" />}
+            icon={<CheckCircle2 className="h-4 w-4" aria-hidden />}
           />
           <StatCard
             label="Overstated"
             value={stats.overstated}
             description="Claims requiring review"
             accent="OVERSTATED"
-            icon={<AlertTriangle className="h-4 w-4" />}
+            icon={<AlertTriangle className="h-4 w-4" aria-hidden />}
           />
           <StatCard
-            label="Contradicted"
+            label="Contradicts"
             value={stats.contradicts}
             description="Evidence conflicts"
             accent="CONTRADICTS"
-            icon={<XCircle className="h-4 w-4" />}
+            icon={<XCircle className="h-4 w-4" aria-hidden />}
           />
           <StatCard
             label="Insufficient"
             value={stats.insufficient}
             description="Insufficient evidence"
             accent="INSUFFICIENT"
-            icon={<HelpCircle className="h-4 w-4" />}
+            icon={<HelpCircle className="h-4 w-4" aria-hidden />}
           />
           <StatCard
             label="Fabricated"
             value={stats.fabricated}
             description="Citation authenticity issue"
             accent="FABRICATED"
-            icon={<Ban className="h-4 w-4" />}
+            icon={<Ban className="h-4 w-4" aria-hidden />}
           />
         </div>
       </section>
 
       <section
-        className="grid gap-4 lg:grid-cols-2 lg:items-stretch"
+        className="grid gap-4 lg:grid-cols-2 lg:items-start"
         aria-label="Verification overview and workflow"
       >
         <VerificationOverview stats={stats} records={records} />
@@ -112,7 +111,7 @@ export default function AppHomePage() {
       </section>
 
       <section
-        className="grid gap-4 lg:grid-cols-2 lg:items-stretch"
+        className="grid gap-4 lg:grid-cols-2 lg:items-start"
         aria-label="Needs review and workspace insights"
       >
         <NeedsReviewSection
@@ -129,7 +128,7 @@ export default function AppHomePage() {
           </h2>
           <Link
             to={ROUTES.APP_HISTORY}
-            className="text-sm font-medium text-primary transition-colors hover:text-primary-hover"
+            className="rounded-sm text-sm font-medium text-primary outline-offset-2 transition-colors hover:text-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             View all
           </Link>
@@ -138,7 +137,7 @@ export default function AppHomePage() {
         {recentRecords.length === 0 ? (
           <div className="rounded-lg border border-border bg-surface px-6 py-10 text-center">
             <span className="mx-auto flex h-11 w-11 items-center justify-center rounded-lg border border-border bg-surface-elevated">
-              <FileSearch className="h-5 w-5 text-text-muted" />
+              <FileSearch className="h-5 w-5 text-text-muted" aria-hidden />
             </span>
             <div className="mt-4 space-y-2">
               <p className="text-sm font-medium text-text-primary">
@@ -150,7 +149,7 @@ export default function AppHomePage() {
               </p>
             </div>
             <Link to={ROUTES.APP_VERIFY} className="mt-5 inline-block">
-              <Button>Start Verification</Button>
+              <Button className="h-10">Start Verification</Button>
             </Link>
           </div>
         ) : (

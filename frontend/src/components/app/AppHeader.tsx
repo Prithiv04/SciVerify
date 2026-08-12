@@ -22,28 +22,28 @@ export function AppHeader({
   className,
 }: AppHeaderProps) {
   return (
-    <div
+    <header
       className={cn(
-        'mb-8 flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between',
+        'flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-center sm:justify-between sm:gap-6',
         className,
       )}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         {eyebrow ? (
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-primary">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-primary">
             {eyebrow}
           </p>
         ) : null}
-        <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight text-text-primary sm:text-[1.75rem]">
           {title}
         </h1>
         {description ? (
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-secondary sm:text-base">
+          <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-text-secondary">
             {description}
           </p>
         ) : null}
         {status ? (
-          <p className="mt-3 inline-flex items-center gap-2 text-xs font-medium text-text-secondary">
+          <p className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-text-secondary">
             <span
               className={cn(
                 'h-2 w-2 rounded-full',
@@ -56,8 +56,10 @@ export function AppHeader({
         ) : null}
       </div>
       {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+        <div className="flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+          {actions}
+        </div>
       ) : null}
-    </div>
+    </header>
   )
 }

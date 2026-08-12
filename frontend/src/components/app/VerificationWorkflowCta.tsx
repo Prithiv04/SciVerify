@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom'
 import { ArrowDown, ArrowRight, Scale, Shield, Swords } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { cn } from '@/lib/cn'
 import { ROUTES } from '@/constants'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
@@ -14,17 +13,17 @@ const agents: Array<{
   {
     name: 'Claim Challenger',
     icon: Swords,
-    description: 'Challenges the claim',
+    description: 'Challenges the claim against cited evidence.',
   },
   {
     name: 'Evidence Defender',
     icon: Shield,
-    description: 'Builds the supporting case',
+    description: 'Builds the strongest supporting case.',
   },
   {
     name: 'Final Reviewer',
     icon: Scale,
-    description: 'Makes the final evidence decision',
+    description: 'Delivers the final evidence-backed decision.',
   },
 ]
 
@@ -32,26 +31,19 @@ function AgentStep({
   name,
   icon: Icon,
   description,
-  className,
 }: {
   name: string
   icon: LucideIcon
   description: string
-  className?: string
 }) {
   return (
-    <div
-      className={cn(
-        'flex w-full min-h-[5.25rem] items-start gap-3 rounded-lg border border-border/70 bg-surface/60 p-4',
-        className,
-      )}
-    >
+    <div className="flex min-h-[4.75rem] w-full items-start gap-3 rounded-lg border border-border/70 bg-surface/60 p-4">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-surface-elevated">
-        <Icon className="h-4 w-4 text-primary" />
+        <Icon className="h-4 w-4 text-primary" aria-hidden />
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium leading-snug text-text-primary">{name}</p>
-        <p className="mt-2 text-xs leading-relaxed text-text-muted">{description}</p>
+        <p className="mt-1.5 text-xs leading-relaxed text-text-muted">{description}</p>
       </div>
     </div>
   )
@@ -59,7 +51,7 @@ function AgentStep({
 
 function StageConnector() {
   return (
-    <div className="flex justify-center py-2" aria-hidden>
+    <div className="flex justify-center py-1.5" aria-hidden>
       <ArrowDown className="h-4 w-4 text-text-muted" />
     </div>
   )
@@ -67,10 +59,7 @@ function StageConnector() {
 
 export function VerificationWorkflowCta() {
   return (
-    <Panel
-      padding="lg"
-      className="h-full border-primary/20 bg-gradient-to-br from-primary/8 via-surface-elevated/50 to-surface"
-    >
+    <Panel padding="lg" className="border-primary/20">
       <p className="text-xs font-semibold uppercase tracking-widest text-primary">
         Verify a scientific claim
       </p>
@@ -91,9 +80,9 @@ export function VerificationWorkflowCta() {
         ])}
       </div>
 
-      <div className="mt-6 flex justify-end">
-        <Link to={ROUTES.APP_VERIFY}>
-          <Button>
+      <div className="mt-6">
+        <Link to={ROUTES.APP_VERIFY} className="block sm:inline-block">
+          <Button className="h-10 w-full sm:w-auto">
             Start verification
             <ArrowRight className="h-4 w-4" />
           </Button>

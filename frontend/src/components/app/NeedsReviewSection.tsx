@@ -4,6 +4,7 @@ import { cn } from '@/lib/cn'
 import { countNeedsReview } from '@/lib/dashboard-selectors'
 import { VerdictBadge } from '@/components/sciverify/VerdictBadge'
 import { ROUTES, verificationReportPath } from '@/constants'
+import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
 import type { VerificationResult } from '@/types/verification'
 
@@ -21,7 +22,7 @@ export function NeedsReviewSection({
   const attentionCount = countNeedsReview(records)
 
   return (
-    <Panel padding="lg" className={cn('flex h-full flex-col', className)}>
+    <Panel padding="md" className={cn(className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-text-primary">Needs review</h2>
@@ -34,18 +35,18 @@ export function NeedsReviewSection({
         {attentionCount > 0 ? (
           <Link
             to={ROUTES.APP_HISTORY}
-            className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-primary hover:text-primary-hover"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs font-medium text-primary outline-offset-2 hover:text-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             View all
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         ) : null}
       </div>
 
       {needsReviewRecords.length === 0 ? (
-        <div className="mt-6 flex flex-1 flex-col items-center justify-center gap-3 py-8 text-center">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface-elevated">
-            <CheckCircle2 className="h-4 w-4 text-success" />
+        <div className="mt-5 flex flex-col items-center gap-3 py-6 text-center">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-elevated">
+            <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
           </span>
           <div className="space-y-1">
             <p className="text-sm font-medium text-text-primary">
@@ -55,32 +56,31 @@ export function NeedsReviewSection({
               All recent verification results are evidence-aligned.
             </p>
           </div>
+          <Link to={ROUTES.APP_VERIFY}>
+            <Button variant="outline" className="h-9">
+              Start Verification
+            </Button>
+          </Link>
         </div>
       ) : (
-        <ul className="mt-5 flex flex-1 flex-col gap-3">
+        <ul className="mt-4 divide-y divide-border/70">
           {needsReviewRecords.map((record) => (
-            <li
-              key={record.id}
-              className="rounded-lg border border-border/70 bg-surface/60 p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                <VerdictBadge verdict={record.verdict} size="sm" />
-                <span className="text-sm font-semibold tabular-nums text-text-primary">
-                  {record.confidence}%
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-text-primary">
-                {record.claim}
-              </p>
-              <div className="mt-4 flex justify-end border-t border-border/60 pt-3">
-                <Link
-                  to={verificationReportPath(record.id)}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary-hover"
-                >
-                  View report
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
+            <li key={record.id}>
+              <Link
+                to={verificationReportPath(record.id)}
+                className="group -mx-1 block rounded-md px-1 py-2.5 outline-offset-2 transition-colors hover:bg-surface/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary sm:py-2"
+                aria-label={`View report: ${record.claim}`}
+              >
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[auto_3.5rem_minmax(0,1fr)] sm:items-center sm:gap-3">
+                  <VerdictBadge verdict={record.verdict} size="sm" />
+                  <span className="text-sm font-semibold tabular-nums text-text-primary sm:text-right">
+                    {record.confidence}%
+                  </span>
+                  <p className="truncate text-sm text-text-primary group-hover:text-text-primary sm:col-span-1">
+                    {record.claim}
+                  </p>
+                </div>
+              </Link>
             </li>
           ))}
         </ul>

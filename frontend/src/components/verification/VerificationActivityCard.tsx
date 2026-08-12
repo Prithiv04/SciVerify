@@ -62,7 +62,7 @@ export function VerificationActivityCard({
       )}
     >
       <CardHeader className="space-y-4 p-5 pb-0">
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <VerdictBadge verdict={record.verdict} size="sm" />
           <div className="text-right">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
@@ -75,7 +75,7 @@ export function VerificationActivityCard({
         </div>
 
         <div className="space-y-3">
-          <p className="text-sm font-medium leading-relaxed text-text-primary">
+          <p className="break-words text-sm font-medium leading-relaxed text-text-primary">
             {record.claim}
           </p>
           <div className="space-y-1 border-l-2 border-border/80 pl-3">
@@ -83,7 +83,7 @@ export function VerificationActivityCard({
               <p
                 key={`${record.id}-${line}`}
                 className={cn(
-                  'text-xs leading-relaxed text-text-secondary',
+                  'break-words text-xs leading-relaxed text-text-secondary',
                   record.evidence[0]?.identifier?.trim() === line && 'font-mono',
                 )}
               >
@@ -96,15 +96,18 @@ export function VerificationActivityCard({
 
       <CardContent className="p-5 pt-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-          <span className="text-xs text-text-muted">
+          <time
+            className="text-xs text-text-muted"
+            dateTime={record.createdAt}
+          >
             {formatDate(record.createdAt)}
-          </span>
+          </time>
           <Link
             to={verificationReportPath(record.id)}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-primary-hover"
+            className="inline-flex items-center gap-1.5 rounded-sm text-sm font-medium text-primary outline-offset-2 transition-colors hover:text-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
           >
             View report
-            <ArrowRight className="h-3.5 w-3.5" />
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
           </Link>
         </div>
       </CardContent>
