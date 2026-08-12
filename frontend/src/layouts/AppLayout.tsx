@@ -13,7 +13,7 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-background text-text-primary">
       <div className="flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 border-r border-border bg-surface lg:block">
+        <aside className="hidden w-64 shrink-0 border-r border-border bg-surface/95 lg:block">
           <AppSidebar />
         </aside>
 
@@ -25,7 +25,7 @@ export default function AppLayout() {
             </span>
           </div>
 
-          <main className="flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main className="mx-auto w-full max-w-6xl flex-1 overflow-x-hidden px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <Outlet />
           </main>
         </div>

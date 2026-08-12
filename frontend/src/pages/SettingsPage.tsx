@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { LogOut, Mail, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState } from 'react'
 import { AppHeader } from '@/components/app/AppHeader'
@@ -41,30 +41,53 @@ export default function SettingsPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Panel padding="md" className="space-y-5">
-          <h2 className="text-lg font-semibold text-text-primary">Profile</h2>
-          <div className="flex items-center gap-4">
+        <Panel padding="lg" className="space-y-6">
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">Profile</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Your workspace identity loaded from Supabase.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-4 rounded-lg border border-border/80 bg-surface-elevated/40 p-4">
             <Avatar name={displayName} size="lg" />
             <div>
               <p className="font-medium text-text-primary">{displayName}</p>
               <p className="text-sm text-text-secondary">{user?.email}</p>
             </div>
           </div>
-          <Input
-            label="Full Name"
-            value={profile?.full_name ?? displayName}
-            readOnly
-          />
-          <Input label="Email" value={user?.email ?? ''} readOnly />
+
+          <div className="space-y-4">
+            <Input
+              label="Full name"
+              value={profile?.full_name ?? displayName}
+              readOnly
+              leftIcon={<UserRound className="h-4 w-4" />}
+            />
+            <Input
+              label="Email"
+              value={user?.email ?? ''}
+              readOnly
+              leftIcon={<Mail className="h-4 w-4" />}
+            />
+          </div>
         </Panel>
 
-        <Panel padding="md" className="space-y-5">
-          <h2 className="text-lg font-semibold text-text-primary">Account</h2>
-          <p className="text-sm text-text-secondary">
+        <Panel padding="lg" className="space-y-6">
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">Account</h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              Session and access controls for this workspace.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-border/80 bg-surface-elevated/30 p-4 text-sm leading-relaxed text-text-secondary">
             Profile data is loaded from your existing Supabase session and
             profile record.
-          </p>
+          </div>
+
           <Divider />
+
           <Button
             variant="danger"
             onClick={handleLogout}

@@ -17,18 +17,21 @@ const agentMeta = {
     role: 'Challenge the claim',
     icon: Swords,
     waitingMessage: 'Waiting for evidence...',
+    runningMessage: 'Challenging the claim...',
   },
   defender: {
     name: 'Defender',
     role: 'Build the strongest supporting case',
     icon: Shield,
     waitingMessage: 'Waiting for evidence...',
+    runningMessage: 'Building supporting case...',
   },
   adjudicator: {
     name: 'Adjudicator',
     role: 'Make the final evidence-backed decision',
     icon: Scale,
     waitingMessage: 'Waiting for arguments...',
+    runningMessage: 'Evaluating both arguments...',
   },
 } as const
 
@@ -54,7 +57,7 @@ function getAgentDescription(
   const status = getAgentStatus(agent, stageIndex)
 
   if (status === 'running') {
-    return message ?? VERIFICATION_STAGES[stageIndex]?.activeMessage ?? meta.role
+    return message ?? meta.runningMessage
   }
   if (status === 'completed') {
     return 'Analysis completed.'
@@ -73,7 +76,7 @@ export function VerificationLoading({
 
   return (
     <div className="space-y-6">
-      <Panel padding="md" className="space-y-2">
+      <Panel padding="md" className="space-y-2 border-primary/15">
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">
           Verifying citation
         </p>
@@ -113,10 +116,11 @@ export function VerificationLoading({
           Agent debate
         </p>
 
-        <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+        <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
           <AgentCard
             name={agentMeta.prosecutor.name}
             role={agentMeta.prosecutor.role}
+            icon={agentMeta.prosecutor.icon}
             status={getAgentStatus('prosecutor', stageIndex)}
             description={getAgentDescription('prosecutor', stageIndex, message)}
             className={cn(
@@ -125,7 +129,7 @@ export function VerificationLoading({
             )}
           />
           <p
-            className="hidden text-center text-sm font-semibold text-text-muted md:block"
+            className="hidden self-center text-sm font-semibold text-text-muted md:block"
             aria-hidden
           >
             VS
@@ -133,6 +137,7 @@ export function VerificationLoading({
           <AgentCard
             name={agentMeta.defender.name}
             role={agentMeta.defender.role}
+            icon={agentMeta.defender.icon}
             status={getAgentStatus('defender', stageIndex)}
             description={getAgentDescription('defender', stageIndex, message)}
             className={cn(
@@ -149,6 +154,7 @@ export function VerificationLoading({
         <AgentCard
           name={agentMeta.adjudicator.name}
           role={agentMeta.adjudicator.role}
+          icon={agentMeta.adjudicator.icon}
           status={getAgentStatus('adjudicator', stageIndex)}
           description={getAgentDescription('adjudicator', stageIndex, message)}
           className={cn(

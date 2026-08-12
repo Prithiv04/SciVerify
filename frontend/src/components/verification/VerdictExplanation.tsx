@@ -1,5 +1,6 @@
 import { Check, X } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { getVerdictConfig } from '@/constants/verdicts'
 import { ConfidenceBar } from '@/components/sciverify/ConfidenceBar'
 import { VerdictBadge } from '@/components/sciverify/VerdictBadge'
 import { Panel } from '@/components/ui/Card'
@@ -21,26 +22,35 @@ export function VerdictExplanation({
   evidenceFactors,
   className,
 }: VerdictExplanationProps) {
+  const config = getVerdictConfig(verdict)
+
   return (
-    <Panel padding="md" className={cn('space-y-5', className)}>
-      <div className="flex flex-wrap items-center gap-3">
-        <VerdictBadge verdict={verdict} size="md" />
-        <p className="text-sm text-text-secondary">
-          Confidence:{' '}
-          <span className="font-semibold text-text-primary">{confidence}%</span>
+    <Panel
+      padding="lg"
+      className={cn(
+        'space-y-6 border ring-1 ring-inset',
+        config.borderClass,
+        config.ringClass,
+        className,
+      )}
+    >
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+          Final verdict
         </p>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <VerdictBadge verdict={verdict} size="md" />
+          <p className="text-base font-semibold tabular-nums text-text-primary">
+            {confidence}% confidence
+          </p>
+        </div>
       </div>
 
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-          Short explanation
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-text-primary">{summary}</p>
-      </div>
+      <p className="text-sm leading-relaxed text-text-primary">{summary}</p>
 
       {evidenceFactors.length > 0 ? (
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+          <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">
             Evidence factors
           </p>
           <ul className="mt-3 space-y-2">

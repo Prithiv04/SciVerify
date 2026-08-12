@@ -77,19 +77,39 @@ export default function VerifyPage() {
     navigate(ROUTES.APP_VERIFY, { replace: true, state: null })
   }
 
+  const handleBackToForm = () => {
+    if (initialRecord) {
+      navigate(ROUTES.APP_HISTORY)
+      return
+    }
+    handleNewVerification()
+  }
+
   return (
     <div>
-      <AppHeader
-        title="New Verification"
-        description="Check whether a scientific claim is supported by its cited source."
-        actions={
-          phase === 'result' ? (
+      {phase === 'form' ? (
+        <AppHeader
+          eyebrow="New verification"
+          title="Evaluate a scientific claim"
+          description="Evaluate whether a scientific claim is supported by its cited evidence."
+        />
+      ) : phase === 'result' ? (
+        <AppHeader
+          title="Verification report"
+          description="Review the complete evidence-backed analysis for this claim."
+          actions={
             <Button variant="outline" onClick={handleNewVerification}>
               New verification
             </Button>
-          ) : null
-        }
-      />
+          }
+        />
+      ) : (
+        <AppHeader
+          eyebrow="Verifying"
+          title="Running verification pipeline"
+          description="Prosecutor, Defender, and Adjudicator are analyzing the cited evidence."
+        />
+      )}
 
       {phase === 'form' ? (
         <VerificationForm onSubmit={handleSubmit} />
@@ -113,7 +133,7 @@ export default function VerifyPage() {
       ) : null}
 
       {phase === 'result' && result ? (
-        <VerificationResultView result={result} />
+        <VerificationResultView result={result} onBack={handleBackToForm} />
       ) : null}
     </div>
   )

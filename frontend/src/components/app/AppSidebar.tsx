@@ -17,41 +17,58 @@ import { useUserDisplayName } from '@/hooks/useUserDisplayName'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
+import type { LucideIcon } from 'lucide-react'
 
-const navItems = [
+const workspaceItems = [
   { label: 'Dashboard', to: ROUTES.APP_HOME, icon: LayoutDashboard },
   { label: 'New Verification', to: ROUTES.APP_VERIFY, icon: Sparkles },
   { label: 'History', to: ROUTES.APP_HISTORY, icon: History },
+]
+
+const accountItems = [
   { label: 'Settings', to: ROUTES.APP_SETTINGS, icon: Settings },
 ]
 
-function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+function NavSection({
+  title,
+  items,
+  onNavigate,
+}: {
+  title: string
+  items: Array<{ label: string; to: string; icon: LucideIcon }>
+  onNavigate?: () => void
+}) {
   const location = useLocation()
 
   return (
-    <nav className="flex flex-1 flex-col gap-1">
-      {navItems.map((item) => {
-        const active = location.pathname === item.to
-        const Icon = item.icon
+    <div className="space-y-2">
+      <p className="px-3 text-[11px] font-semibold uppercase tracking-widest text-text-muted">
+        {title}
+      </p>
+      <div className="flex flex-col gap-0.5">
+        {items.map((item) => {
+          const active = location.pathname === item.to
+          const Icon = item.icon
 
-        return (
-          <Link
-            key={item.to}
-            to={item.to}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-              active
-                ? 'bg-primary-muted text-primary'
-                : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary',
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {item.label}
-          </Link>
-        )
-      })}
-    </nav>
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              onClick={onNavigate}
+              className={cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                active
+                  ? 'border border-primary/20 bg-primary-muted text-primary shadow-sm'
+                  : 'border border-transparent text-text-secondary hover:border-border/60 hover:bg-surface-hover hover:text-text-primary',
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {item.label}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -78,8 +95,8 @@ function UserSection({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <div className="border-t border-border pt-4">
-      <div className="mb-3 flex items-center gap-3 rounded-lg border border-border bg-surface-elevated/60 p-3">
+    <div className="mt-auto border-t border-border pt-4">
+      <div className="mb-3 flex items-center gap-3 rounded-lg border border-border/80 bg-surface-elevated/60 p-3">
         <Avatar name={displayName} size="sm" />
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-text-primary">
@@ -88,12 +105,6 @@ function UserSection({ onNavigate }: { onNavigate?: () => void }) {
           <p className="truncate text-xs text-text-muted">{user?.email}</p>
         </div>
       </div>
-      <Link to={ROUTES.APP_SETTINGS} onClick={onNavigate}>
-        <Button variant="ghost" size="sm" className="mb-2 w-full justify-start">
-          <Settings className="h-4 w-4" />
-          Profile & settings
-        </Button>
-      </Link>
       <Button
         variant="outline"
         size="sm"
@@ -120,15 +131,22 @@ export function AppSidebar({
       <Link
         to={ROUTES.APP_HOME}
         onClick={onNavigate}
-        className="mb-6 flex items-center gap-2.5 text-text-primary"
+        className="mb-8 flex items-center gap-2.5 text-text-primary"
       >
         <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-elevated">
           <ShieldCheck className="h-4 w-4 text-primary" />
         </span>
-        <span className="font-semibold tracking-tight">SciVerify</span>
+        <div>
+          <span className="block font-semibold tracking-tight">SciVerify</span>
+          <span className="block text-[11px] text-text-muted">Research workspace</span>
+        </div>
       </Link>
 
-      <SidebarNav onNavigate={onNavigate} />
+      <div className="flex flex-1 flex-col gap-6">
+        <NavSection title="Workspace" items={workspaceItems} onNavigate={onNavigate} />
+        <NavSection title="Account" items={accountItems} onNavigate={onNavigate} />
+      </div>
+
       <UserSection onNavigate={onNavigate} />
     </div>
   )

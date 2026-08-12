@@ -27,7 +27,7 @@ export function SuggestedCorrectionPanel({
   }
 
   return (
-    <Panel padding="md" className="space-y-5 border-warning/20">
+    <Panel padding="lg" className="space-y-5 border-warning/20">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-lg font-semibold text-text-primary">
           Suggested correction
@@ -42,10 +42,10 @@ export function SuggestedCorrectionPanel({
 
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
             Original claim
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-text-primary">
+          <p className="mt-3 text-sm leading-relaxed text-text-primary">
             &ldquo;{correction.originalClaim}&rdquo;
           </p>
         </div>
@@ -55,10 +55,10 @@ export function SuggestedCorrectionPanel({
         </div>
 
         <div className="rounded-lg border border-danger/20 bg-danger/5 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-danger">
-            Problem
+          <p className="text-xs font-semibold uppercase tracking-widest text-danger">
+            Why it needs revision
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+          <p className="mt-3 text-sm leading-relaxed text-text-secondary">
             {correction.problem}
           </p>
         </div>
@@ -68,17 +68,17 @@ export function SuggestedCorrectionPanel({
         </div>
 
         <div className="rounded-lg border border-primary/20 bg-primary-muted p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-primary">
-            Suggested correction
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Recommended wording
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-text-primary">
+          <p className="mt-3 text-sm leading-relaxed text-text-primary">
             &ldquo;{correction.suggestedWording}&rdquo;
           </p>
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-xs font-medium text-warning">
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm font-medium text-warning">
           Human approval required before using this wording in any publication.
         </p>
         <Button

@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
-import { Check, X } from 'lucide-react'
+import { ArrowLeft, Check, X } from 'lucide-react'
 import { AgentAnalysisPanel } from '@/components/verification/AgentAnalysisPanel'
 import { SuggestedCorrectionPanel } from '@/components/verification/SuggestedCorrectionPanel'
 import { VerdictExplanation } from '@/components/verification/VerdictExplanation'
 import { EvidenceCard } from '@/components/sciverify/EvidenceCard'
+import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
 import { Divider } from '@/components/ui/Divider'
 import type { VerificationResult } from '@/types/verification'
 
 export interface VerificationReportViewProps {
   result: VerificationResult
+  onBack?: () => void
 }
 
 function ReportSection({
@@ -37,12 +39,16 @@ function CitationAuthenticity({ status }: { status: VerificationResult['citation
         <X className="h-5 w-5 shrink-0 text-danger" aria-hidden />
       ) : (
         <Check
-          className={cnIcon(verified)}
+          className={
+            verified
+              ? 'h-5 w-5 shrink-0 text-success'
+              : 'h-5 w-5 shrink-0 text-warning'
+          }
           aria-hidden
         />
       )}
       <div>
-        <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+        <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
           Citation authenticity
         </p>
         <p
@@ -61,22 +67,33 @@ function CitationAuthenticity({ status }: { status: VerificationResult['citation
   )
 }
 
-function cnIcon(verified: boolean) {
-  return verified
-    ? 'h-5 w-5 shrink-0 text-success'
-    : 'h-5 w-5 shrink-0 text-warning'
-}
-
-export function VerificationReportView({ result }: VerificationReportViewProps) {
+export function VerificationReportView({
+  result,
+  onBack,
+}: VerificationReportViewProps) {
   return (
     <article className="space-y-8">
-      <header className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-          Science verification report
-        </p>
-        <p className="text-sm text-text-muted">
-          Generated {new Date(result.createdAt).toLocaleString()}
-        </p>
+      <header className="space-y-4 border-b border-border pb-6">
+        {onBack ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="-ml-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to verification
+          </Button>
+        ) : null}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            Science verification report
+          </p>
+          <p className="text-sm text-text-muted">
+            Generated {new Date(result.createdAt).toLocaleString()}
+          </p>
+        </div>
       </header>
 
       <ReportSection title="Claim">
@@ -94,7 +111,7 @@ export function VerificationReportView({ result }: VerificationReportViewProps) 
       <ReportSection title="Citation">
         <Panel padding="md">
           <p className="text-sm leading-relaxed text-text-primary">{result.citation}</p>
-          <p className="mt-2 text-xs uppercase text-text-muted">
+          <p className="mt-2 text-xs uppercase tracking-wide text-text-muted">
             Source type: {result.sourceType}
           </p>
         </Panel>

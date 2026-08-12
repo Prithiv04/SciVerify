@@ -1,145 +1,400 @@
-# SciVerify — Frontend Enhancement Phase
-## Verification Experience & Research-Grade Results UI
+# Phase 5.2 — Premium Research Workspace UI & UX Polish
 
-You are working on the existing SciVerify frontend.
+## Objective
 
-IMPORTANT:
-This is an enhancement phase, NOT a rebuild.
+Upgrade the existing SciVerify authenticated workspace from a functional dashboard into a polished, research-grade AI verification product.
 
-The following already exist and MUST be preserved:
-- Supabase authentication
-- AuthProvider
-- ProtectedRoute / GuestRoute
-- Landing page
-- Design system
-- UI components
-- `/ui-preview`
-- `/login`
-- `/register`
-- `/forgot-password`
-- `/reset-password`
-- `/app`
-- `/app/home`
-- `/app/verify`
-- `/app/history`
-- `/app/settings`
-- Zustand stores
-- Existing verification types
-- Existing mock verification service
-- Existing responsive layout
-- Existing AppLayout / sidebar / header
-- Existing VerdictBadge, VerdictCard, EvidenceCard, AgentCard, ConfidenceBar, VerificationTimeline, etc.
+The current frontend is functional and the core flows already work. DO NOT rebuild the application.
 
-Do NOT replace the architecture.
-Do NOT create unnecessary new dependencies.
-Reuse existing components wherever possible.
+This phase is strictly a UI/UX enhancement phase.
 
-The goal of this phase is to make the verification experience look and behave like a serious research verification product.
+The goal is:
 
-==================================================
-## 1. PRIMARY GOAL
-==================================================
+"Research-grade scientific verification workspace with visible multi-agent intelligence."
 
-Improve `/app/verify` and the verification result experience so the complete workflow is visually clear:
+The interface should feel comparable in polish to modern products such as Linear, Vercel, Perplexity, Raycast, and high-quality research tools while preserving SciVerify's existing dark research-focused visual identity.
 
-User
-  ↓
-Claim + Citation
-  ↓
-Verification Progress
-  ↓
-Prosecutor + Defender
-  ↓
-Adjudicator
-  ↓
-Evidence
-  ↓
-Final Verdict
-  ↓
-Suggested Correction
-  ↓
-Verification Report
+---
 
-The frontend must be designed so that later we can replace the existing mock verification service with a real backend without redesigning the UI.
+# IMPORTANT CONSTRAINTS
 
-Do NOT implement real AI/API logic in this phase.
+DO NOT:
 
-Keep the existing mock verification service working.
+- rebuild the routing architecture
+- rewrite authentication
+- change Supabase integration
+- replace Zustand
+- replace React Router
+- replace Tailwind
+- replace existing UI primitives
+- remove existing functionality
+- add a chatbot
+- add an AI assistant sidebar
+- add unnecessary analytics
+- add social features
+- add team collaboration
+- add theme switching
+- add excessive animations
+- add fake functionality
+- introduce external APIs
+- change the mock verification engine
+- modify the landing page unless required for shared design consistency
 
-==================================================
-## 2. VERIFICATION INPUT
-==================================================
+Reuse the existing components wherever possible.
 
-Review the existing `/app/verify` implementation.
+Before changing anything, inspect the existing component architecture and identify reusable components.
 
-Do NOT rebuild it if it already satisfies the requirements.
+---
 
-The input UI must clearly contain:
+# DESIGN DIRECTION
 
-### Claim
+SciVerify should visually communicate:
 
-A large textarea where the user enters the scientific claim.
+- scientific credibility
+- evidence-first verification
+- multi-agent reasoning
+- trust
+- precision
+- structured analysis
+
+Avoid:
+
+- gaming UI
+- excessive neon
+- chatbot aesthetics
+- oversized gradients
+- excessive glassmorphism
+- decorative UI that does not communicate information
+
+Use restrained visual hierarchy.
+
+The existing dark theme should remain.
+
+---
+
+# 1. GLOBAL APP SHELL
+
+Improve:
+
+src/layouts/AppLayout.tsx
+src/components/app/AppSidebar.tsx
+src/components/app/AppHeader.tsx
+
+## Sidebar
+
+Keep the existing sidebar structure:
+
+SciVerify
+Dashboard
+New Verification
+History
+Settings
+
+Improve it with:
+
+- better active-state treatment
+- subtle hover states
+- clearer icon alignment
+- improved spacing
+- slightly stronger visual separation
+- workspace identity
+- subtle bottom account section
+- polished collapse/mobile behavior
+
+The active navigation item should be immediately recognizable without being overly bright.
+
+Add a subtle section label if appropriate:
+
+WORKSPACE
+
+Dashboard
+New Verification
+History
+
+ACCOUNT
+
+Settings
+
+Do not make the sidebar unnecessarily large.
+
+---
+
+# 2. APP HEADER
+
+Improve the header hierarchy.
+
+Current:
+
+Welcome back, Prithiv R
+Verify scientific claims against their cited evidence.
+
+Improve to something like:
+
+Welcome back, Prithiv R
+
+Evidence-backed verification for your scientific claims.
+
+Add a visually strong primary CTA:
+
++ New Verification
+
+The CTA should be clearly visible near the top-right.
+
+On smaller screens:
+
+- stack appropriately
+- maintain accessibility
+- avoid overflow
+
+---
+
+# 3. DASHBOARD — MAKE IT FEEL LIKE A REAL PRODUCT
+
+Modify:
+
+src/pages/AppHomePage.tsx
+
+The dashboard should have these sections:
+
+1. Hero/header
+2. Verification statistics
+3. Recent verification activity
+4. Quick verification CTA
+
+---
+
+## 3.1 Statistics
+
+Keep the existing five statistics:
+
+Total Verifications
+Supported
+Overstated
+Contradicted
+Fabricated
+
+Improve the StatCard visually.
+
+Do NOT change the existing data.
+
+Each card should have:
+
+- label
+- large number
+- subtle icon
+- consistent height
+- consistent number alignment
+- subtle hover elevation
+- subtle border treatment
+- optional tiny supporting text where useful
 
 Example:
 
-"AI improves software development productivity."
+TOTAL VERIFICATIONS
+6
 
-### Citation / DOI
+All verification runs
 
-An input for:
-- DOI
-- citation string
-- paper identifier
+SUPPORTED
+1
+
+Evidence aligned
+
+OVERSTATED
+2
+
+Claims requiring review
+
+CONTRADICTED
+1
+
+Evidence conflicts
+
+FABRICATED
+1
+
+Citation authenticity issue
+
+Do not invent statistics.
+
+If supporting text is not available from existing data, keep it minimal.
+
+---
+
+# 4. RECENT VERIFICATIONS
+
+Improve the current verification cards.
+
+Current cards feel too flat.
+
+Each verification should visually communicate:
+
+Claim
+Citation
+Verdict
+Confidence
+Date
+Action
+
+Create a stronger card hierarchy:
+
+┌────────────────────────────────────────────────────┐
+│ OVERSTATED                              76%         │
+│                                                    │
+│ The method improves accuracy by 40% on real-world │
+│ software development tasks.                       │
+│                                                    │
+│ 10.1000/demo.2024.001                              │
+│                                                    │
+│ Confidence ━━━━━━━━━━━━━━━━━━━━━━━ 76%             │
+│                                                    │
+│ Aug 11, 2026                         View report → │
+└────────────────────────────────────────────────────┘
+
+The verdict should be visually prominent.
+
+Confidence should have a clean progress indicator.
+
+Do not make cards excessively tall.
+
+Add subtle hover interaction:
+
+- border becomes slightly more visible
+- card lifts by a few pixels
+- View report arrow shifts slightly
+
+Keep animations restrained.
+
+---
+
+# 5. DASHBOARD EMPTY/NEW VERIFICATION CTA
+
+Create a polished "Start a verification" section if appropriate.
 
 Example:
 
-10.1145/example
+┌──────────────────────────────────────────────────────┐
+│                                                      │
+│  Verify a scientific claim                           │
+│                                                      │
+│  Compare the claim against its cited evidence        │
+│  using Prosecutor, Defender, and Adjudicator.        │
+│                                                      │
+│                 [ Start verification → ]             │
+│                                                      │
+└──────────────────────────────────────────────────────┘
 
-### Optional context
+This should visually reinforce the core product concept.
 
-If the current architecture already supports it, allow a small optional context field.
+---
 
-Do NOT add unnecessary fields.
+# 6. NEW VERIFICATION PAGE
 
-### Primary CTA
+Modify:
 
-Button:
+src/pages/VerifyPage.tsx
+src/components/verification/VerificationForm.tsx
 
-"Verify Citation"
+The current form works, so DO NOT rebuild the functionality.
 
-The form must:
-- validate input
-- show useful validation errors
-- prevent empty submissions
-- disable submission while verification is running
-- preserve existing Zod validation
-- work correctly on mobile
+Improve the visual experience.
 
-Reuse existing Button, Input, Textarea, Card and validation components.
+The page should feel like a specialized scientific verification workspace.
 
-==================================================
-## 3. LIVE VERIFICATION PROGRESS
-==================================================
+Add a compact introductory header:
 
-Upgrade the current loading experience.
+NEW VERIFICATION
 
-Do NOT simply show:
+Evaluate whether a scientific claim is supported by its cited evidence.
 
-"Loading..."
+Then organize the form into a clear card.
 
-Instead create a research-grade verification progress interface.
+---
 
-Show these stages:
+## Claim input
 
-1. Citation identified
-2. Paper existence checked
-3. Evidence retrieved
-4. Prosecutor analysis
-5. Defender analysis
-6. Adjudicator decision
-7. Final report generated
+Make "Scientific claim" the dominant field.
 
-Example visual state:
+Use a large textarea.
+
+Placeholder:
+
+"Example: The method improves software development productivity by 40%."
+
+Add character guidance if already supported by validation.
+
+---
+
+## Source type
+
+Improve the current DOI / URL / Citation / Reference text selector.
+
+Make the options visually clear.
+
+Example:
+
+SOURCE TYPE
+
+[ DOI ] [ URL ] [ Citation ] [ Reference ]
+
+Do not add functionality unless already supported.
+
+---
+
+## Citation
+
+Improve the citation field hierarchy.
+
+Show a small helper:
+
+"Provide the DOI, citation, or paper identifier that supposedly supports the claim."
+
+---
+
+## Optional context
+
+Keep it visually secondary.
+
+Label:
+
+ADDITIONAL CONTEXT (OPTIONAL)
+
+This should not compete with the claim field.
+
+---
+
+# 7. VERIFICATION PIPELINE PREVIEW
+
+Before the user submits, add a subtle informational panel explaining what happens.
+
+Example:
+
+VERIFICATION PIPELINE
+
+01  Evidence retrieval
+02  Prosecutor challenge
+03  Defender analysis
+04  Adjudicator decision
+
+This should be informational only.
+
+Do not pretend that the agents are running before verification starts.
+
+This reinforces SciVerify's unique architecture.
+
+---
+
+# 8. VERIFICATION LOADING EXPERIENCE
+
+Modify:
+
+src/components/verification/VerificationLoading.tsx
+
+This is one of the most important UI improvements.
+
+Make the multi-agent process visually impressive but professional.
+
+Use:
 
 VERIFYING CITATION
 
@@ -147,220 +402,167 @@ VERIFYING CITATION
 ✓ Paper existence verified
 ✓ Evidence retrieved
 
-⚔ Prosecutor
-   Searching for contradictions...
+Then:
 
-⚔ Defender
-   Finding supporting evidence...
+┌─────────────────────────────┐
+│ ⚔ Prosecutor               │
+│ Challenging the claim...   │
+│ ● Running                  │
+└─────────────────────────────┘
 
-◉ Adjudicator
-   Waiting for arguments...
+VS
 
-Then transition to:
+┌─────────────────────────────┐
+│ 🛡 Defender                │
+│ Building supporting case   │
+│ ● Running                  │
+└─────────────────────────────┘
 
-✓ Prosecutor completed
-✓ Defender completed
-✓ Adjudicator completed
+↓
 
-Generating final verdict...
+┌─────────────────────────────┐
+│ ⚖ Adjudicator              │
+│ Evaluating both arguments  │
+│ ○ Waiting                  │
+└─────────────────────────────┘
 
-Requirements:
+Use the existing progress system.
 
-- Clearly show current active step
-- Completed steps use success state
-- Pending steps use neutral state
-- Active agent has an obvious visual indicator
-- Use the existing VerificationTimeline / ProgressStep components if suitable
-- Reuse AgentCard where appropriate
-- Do not create excessive animations
-- Respect prefers-reduced-motion
-- Keep animations subtle and professional
+Do not introduce undefined icons or dependencies.
 
-The loading flow should make the multi-agent architecture obvious during a hackathon demo.
+Verify every imported icon exists.
 
-==================================================
-## 4. AGENT DEBATE VIEW
-==================================================
+This specifically prevents runtime errors such as:
 
-Upgrade the result page to clearly show the three-agent debate.
+ReferenceError: Swords is not defined
 
-Use:
+Run lint/build after implementation.
+
+---
+
+# 9. AGENT DEBATE RESULT
+
+Modify:
+
+src/components/verification/AgentAnalysisPanel.tsx
+
+This should become one of SciVerify's strongest UI sections.
+
+Create clear visual separation:
 
 PROSECUTOR
-Role:
 Challenge the claim
 
 DEFENDER
-Role:
-Build the strongest supporting case
+Build the supporting case
+
+Then:
 
 ADJUDICATOR
-Role:
-Make the final evidence-backed decision
+Final assessment
 
-Visual structure:
+Use the existing AgentCard/design system where possible.
 
-                 AGENT DEBATE
+Add:
 
-┌─────────────────────┐
-│ ⚔ PROSECUTOR       │
-│                     │
-│ Challenge analysis  │
-│                     │
-│ Findings...         │
-└─────────────────────┘
+- agent role
+- conclusion
+- evidence summary
+- status
+- subtle agent icon
+- clear VS relationship
 
-           VS
+Do not create fake additional agent reasoning beyond existing mock data.
 
-┌─────────────────────┐
-│ 🛡 DEFENDER         │
-│                     │
-│ Supporting analysis │
-│                     │
-│ Findings...         │
-└─────────────────────┘
+---
 
-           ↓
+# 10. VERDICT RESULT
 
-┌─────────────────────┐
-│ ⚖ ADJUDICATOR      │
-│                     │
-│ Final reasoning...  │
-│                     │
-│ Verdict...          │
-└─────────────────────┘
+Modify:
 
-Important:
+src/components/verification/VerdictExplanation.tsx
 
-Do not use "Parser", "Retriever", or "Synthesizer" anywhere in the actual SciVerify verification workflow.
+Make the verdict feel like the final decision of the verification process.
 
-The public and product-facing architecture is:
+Example:
 
-Prosecutor
-Defender
-Adjudicator
+FINAL VERDICT
 
-Use the existing AgentCard component where possible.
+OVERSTATED
 
-Each agent should show:
-- Name
-- Role
-- Status
-- Summary/findings
-- Evidence references if available
+76% confidence
 
-Keep the UI readable.
+The evidence supports the general direction of the claim,
+but the cited magnitude is higher than the reported result.
 
-Do not expose hidden chain-of-thought or private model reasoning.
+Evidence factors:
 
-The UI should show concise, user-facing findings/evidence summaries, not internal reasoning traces.
+✓ Direction of effect supported
+✓ Study population matches
+✕ Claimed effect size is higher than reported
 
-==================================================
-## 5. EVIDENCE CARDS
-==================================================
+Make the verdict visually dominant.
 
-Improve the existing EvidenceCard presentation.
+Use the existing VerdictBadge / verdict styling.
 
-Each evidence card should support:
+---
+
+# 11. EVIDENCE CARDS
+
+Improve:
+
+src/components/sciverify/EvidenceCard.tsx
+
+The card should feel like a research evidence object.
+
+Structure:
 
 SOURCE
 
 Paper title
 
-Authors
+Authors / publication / year
 
-Year
+DOI
 
-Journal / venue
-
-DOI or source identifier
-
---------------------------------
+────────────────────────
 
 RELEVANT EVIDENCE
 
-A relevant extracted passage or evidence summary.
+"Actual extracted passage..."
 
---------------------------------
+────────────────────────
 
 WHY THIS MATTERS
 
-Short explanation of how this evidence relates to the claim.
+Explanation of how the evidence relates to the claim.
 
---------------------------------
+────────────────────────
 
-Evidence strength:
-HIGH / MEDIUM / LOW
+Evidence strength: HIGH
+Relevance: 94%
 
-Relevance:
-XX%
+[Open source →]
 
-[Open Source]
+Improve typography and spacing.
 
-Requirements:
+Do not fabricate additional evidence.
 
-- Reuse the existing EvidenceCard
-- Make source information easy to scan
-- Evidence must be visually separated from interpretation
-- Include source links when available
-- Do not fabricate URLs
-- Do not make fake evidence look like real evidence
-- Mock evidence should remain clearly represented by the existing mock system
+Use the existing mock data.
 
-Later the backend will provide real retrieved evidence.
+---
 
-==================================================
-## 6. VERDICT EXPLANATION
-==================================================
+# 12. SUGGESTED CORRECTION
 
-Improve the final verdict section.
+Improve:
 
-Do not only display:
+src/components/verification/SuggestedCorrectionPanel.tsx
 
-OVERSTATED — 76%
+Make this feel like a professional research editing recommendation.
 
-Instead show:
+Structure:
 
-OVERSTATED
-
-Confidence: 76%
-
-Short explanation:
-
-"The paper supports the general direction of the claim, but the cited statement exaggerates the reported effect."
-
-Then show concise evidence factors:
-
-✓ Direction of effect supported
-✓ Study population matches
-✗ Claimed effect size is higher than reported
-
-Use the existing verdict configuration.
-
-Supported verdicts are:
-
-SUPPORTS
-OVERSTATED
-CONTRADICTS
-INSUFFICIENT
-FABRICATED
-
-Do not introduce additional verdict types unless the existing architecture explicitly requires them.
-
-Use the existing:
-- VerdictBadge
-- VerdictCard
-- ConfidenceBar
-
-Make the final verdict visually prominent but not flashy.
-
-==================================================
-## 7. SUGGESTED CORRECTION
-==================================================
-
-Improve the existing SuggestedCorrectionPanel.
-
-Display:
+SUGGESTED CORRECTION
 
 ORIGINAL CLAIM
 
@@ -368,568 +570,338 @@ ORIGINAL CLAIM
 
 ↓
 
-PROBLEM
+WHY IT NEEDS REVISION
 
-"The cited paper reports a 23% improvement."
+The cited study reports a 23% improvement.
 
 ↓
 
-SUGGESTED CORRECTION
+RECOMMENDED WORDING
 
-"The method improved accuracy by 23% under the reported experimental conditions."
+"The method improved accuracy by 23% under the
+reported experimental conditions."
 
-Add:
-
-[Copy correction]
-
-Also clearly display:
-
-"Human approval required"
-
-Important:
-
-SciVerify MUST NOT automatically modify the user's paper.
-
-The system only suggests a correction.
-
-Use proper visual distinction between:
-- Original claim
-- Problem
-- Suggested correction
-
-The copy button should:
-- copy the correction
-- show success feedback
-- work on supported browsers
-- fail gracefully if clipboard access is unavailable
-
-==================================================
-## 8. FULL VERIFICATION REPORT
-==================================================
-
-Create or improve a complete verification report view.
-
-This should feel like a research report, not a chatbot response.
-
-Suggested structure:
-
-SCIENCE VERIFICATION REPORT
-
---------------------------------
-CLAIM
---------------------------------
-
-[Claim]
-
---------------------------------
-CITATION
---------------------------------
-
-[Citation]
-
---------------------------------
-CITATION AUTHENTICITY
---------------------------------
-
-✓ VERIFIED
-
-or
-
-✕ FABRICATED
-
---------------------------------
-AGENT DEBATE
---------------------------------
-
-Prosecutor
-[summary]
-
-Defender
-[summary]
-
-Adjudicator
-[summary]
-
---------------------------------
-EVIDENCE
---------------------------------
-
-Evidence Card 1
-
-Evidence Card 2
-
---------------------------------
-FINAL VERDICT
---------------------------------
-
-[Verdict Badge]
-
-Confidence: XX%
-
-[Explanation]
-
---------------------------------
-SUGGESTED CORRECTION
---------------------------------
-
-[Correction]
-
-[Copy correction]
+[ Copy correction ]
 
 Human approval required.
 
-Requirements:
+The human approval message should be visually obvious.
 
-- Reuse existing components
-- Make the report easy to scan
-- Use strong visual hierarchy
-- Avoid excessive decoration
-- Ensure responsive layout
-- Desktop should use available width effectively
-- Mobile should stack sections naturally
+Never automatically modify user content.
 
-==================================================
-## 9. HISTORY
-==================================================
+---
 
-Review the existing `/app/history`.
+# 13. FULL VERIFICATION REPORT
 
-Keep it simple.
+Improve:
 
-Each verification entry should show:
+src/components/verification/VerificationReportView.tsx
+
+This should feel like SciVerify's signature screen.
+
+Add strong visual hierarchy:
+
+SCIENCE VERIFICATION REPORT
 
 Claim
+────────────────────────
+
 Citation
-Verdict
-Confidence
-Date
+────────────────────────
 
-Example:
+Citation authenticity
+✓ VERIFIED
 
-AI improves...
-SUPPORTS
-91%
-Aug 11, 2026
+Agent debate
+────────────────────────
 
-Method increases...
+Prosecutor
+...
+
+Defender
+...
+
+Adjudicator
+...
+
+Evidence
+────────────────────────
+
+Evidence cards
+
+Final verdict
+────────────────────────
+
 OVERSTATED
-76%
-Aug 11, 2026
+76% confidence
 
-Model achieves...
-CONTRADICTS
-84%
-Aug 10, 2026
+Suggested correction
+────────────────────────
 
-Unknown paper...
-FABRICATED
-98%
-Aug 10, 2026
+...
 
-Clicking an entry should open the complete verification result/report.
+Add a polished report header.
 
-Do not implement database persistence in this phase unless it already exists.
+Include a clear:
 
-Continue using the existing frontend state/mock architecture.
+← Back to verification
 
-==================================================
-## 10. DASHBOARD
-==================================================
+or equivalent existing navigation.
 
-Review `/app/home`.
+Do not add export functionality unless already implemented.
 
-Keep the dashboard focused.
+If export is not implemented, do not show a fake export button.
 
-It should communicate:
+---
 
-Welcome back, [user name]
+# 14. HISTORY PAGE
 
-Quick action:
-[New Verification]
+Modify:
 
-Optional lightweight statistics:
+src/pages/HistoryPage.tsx
 
-Total verifications
-Supported
-Overstated
-Contradicted
-Fabricated
+Current functionality should remain.
 
-Recent verifications
+Improve each history item with:
 
-Do NOT build a huge analytics dashboard.
+- verdict badge
+- confidence
+- claim
+- citation
+- date
+- View report action
 
-Do NOT add charts unless they provide real value.
+Improve search/filter controls.
 
-The dashboard should primarily help the user start a verification quickly.
+Make the list easier to scan.
 
-==================================================
-## 11. UX STATES
-==================================================
+Use consistent spacing.
 
-Every important screen must handle:
+Consider grouping the verdict/filter controls into a compact toolbar.
 
-### Empty state
+Do not add unnecessary charts.
 
-Example:
+---
 
-"No verifications yet."
+# 15. SETTINGS
 
-[Start your first verification]
+Keep Settings intentionally simple.
 
-### Loading state
+Do not over-design it.
 
-Use existing Skeleton / Spinner / Progress components.
+Improve:
 
-### Success state
+- profile card
+- account information hierarchy
+- logout action
+- spacing
+- typography
 
-Clearly show completed verification.
+Do not add unnecessary settings.
 
-### Error state
+---
 
-Show a useful error message and retry option.
+# 16. MICRO-INTERACTIONS
 
-Example:
+Add restrained interactions:
 
-"Verification could not be completed."
+- card hover
+- button hover
+- navigation hover
+- subtle progress transitions
+- smooth section appearance
 
-[Try again]
+Respect:
 
-Do not expose raw stack traces to users.
+prefers-reduced-motion
 
-### Invalid input
+Do not add:
 
-Show clear validation messages directly near the relevant field.
+- excessive particles
+- floating animations
+- flashy gradients
+- continuous motion
+- distracting effects
 
-==================================================
-## 12. RESPONSIVE DESIGN
-==================================================
+---
 
-The complete workflow must work on:
+# 17. RESPONSIVE DESIGN
 
-- Desktop
-- Laptop
-- Tablet
-- Mobile
+Verify:
+
+Desktop
+Tablet
+Mobile
 
 Desktop:
-- sidebar remains usable
-- content uses available width
-- evidence and agent cards can use grid layouts
+
+- sidebar visible
+- content centered
+- cards properly sized
+
+Tablet:
+
+- sidebar/drawer behavior preserved
+- cards adapt
 
 Mobile:
-- sidebar becomes drawer
-- cards stack
-- buttons remain accessible
+
+- drawer navigation
+- single-column cards
+- readable typography
 - no horizontal scrolling
-- long paper titles wrap correctly
-- evidence text remains readable
+- CTA remains accessible
 
-==================================================
-## 13. DESIGN RULES
-==================================================
+---
 
-Preserve the existing SciVerify design system.
-
-Use:
-- dark research UI
-- existing accent color
-- existing verdict colors
-- glass/surface styling already established
-- existing spacing system
-- existing typography
-- existing cards
-
-Do NOT introduce:
-- new color systems
-- random gradients
-- gaming UI
-- chatbot bubbles
-- excessive glow
-- excessive animations
-- unnecessary icons
-- unrelated design patterns
-
-SciVerify should look like a serious academic/research verification product.
-
-==================================================
-## 14. COMPONENT REUSE
-==================================================
-
-Before creating a new component, check whether an existing component can be reused.
-
-Existing relevant components include:
-
-- Button
-- Input
-- Textarea
-- Select
-- Badge
-- Card
-- Panel
-- Tabs
-- Drawer
-- Modal
-- Spinner
-- Skeleton
-- VerdictBadge
-- VerdictCard
-- ConfidenceBar
-- AgentCard
-- EvidenceCard
-- ProgressStep
-- VerificationTimeline
-- StatCard
-- VerificationForm
-- VerificationLoading
-- VerificationResultView
-- AgentAnalysisPanel
-- SuggestedCorrectionPanel
-
-Extend existing components when appropriate instead of duplicating them.
-
-==================================================
-## 15. DATA CONTRACT
-==================================================
-
-Do NOT redesign the entire verification data model.
-
-First inspect:
-
-src/types/verification.ts
-
-and the existing:
-
-mock verification service
-verification store
-verification result components
-
-Make the UI consume the existing typed VerificationResult.
-
-If additional fields are genuinely required for the improved UI, add them carefully and update all mock data.
-
-Potential fields include:
-
-- citationStatus
-- verificationStages
-- agent summaries
-- evidence
-- verdict
-- confidence
-- explanation
-- correction
-
-Do not add unnecessary fields.
-
-The architecture must remain easy to connect to a real backend later.
-
-==================================================
-## 16. MOCK DATA
-==================================================
-
-Keep the mock verification system functional.
-
-Create realistic examples covering all five verdicts:
-
-SUPPORTS
-OVERSTATED
-CONTRADICTS
-INSUFFICIENT
-FABRICATED
-
-At least one example should demonstrate:
-
-Claim:
-A statement that is directionally correct but exaggerates the reported effect.
-
-Expected:
-
-OVERSTATED
-
-This should make the demo showcase the strongest SciVerify capability.
-
-==================================================
-## 17. IMPORTANT PRODUCT BOUNDARY
-==================================================
-
-Do NOT implement the real AI engine in this phase.
-
-Do NOT add:
-- OpenAI API
-- Gemini API
-- Claude API
-- CrewAI backend
-- LangGraph backend
-- Crossref API
-- Semantic Scholar API
-- arXiv API
-
-Those belong to the backend/verification-engine phase.
-
-The frontend must simply be prepared to consume real verification results later.
-
-==================================================
-## 18. DO NOT BUILD
-==================================================
-
-Do NOT spend time on:
-
-- Chatbot
-- AI assistant sidebar
-- Social features
-- Notifications
-- Team collaboration
-- Profile customization
-- Theme switching
-- Complex animations
-- PDF editor
-- Full manuscript editor
-- Huge analytics dashboards
-- Dozens of charts
-- Unnecessary settings
-- Payment system
-- Admin dashboard
-
-These are outside the current scope.
-
-==================================================
-## 19. ACCESSIBILITY
-==================================================
+# 18. ACCESSIBILITY
 
 Ensure:
 
-- buttons have meaningful labels
-- inputs have labels
-- keyboard navigation works
-- focus states are visible
-- sufficient contrast
-- loading states are understandable
-- reduced-motion preference is respected
-- icon-only buttons have accessible labels
+- buttons have accessible labels
+- interactive cards are keyboard accessible where applicable
+- focus states remain visible
+- color is not the only indicator of verdict
+- text contrast remains readable
+- reduced motion is respected
 
-==================================================
-## 20. TESTING
-==================================================
+---
 
-After implementation run:
+# 19. VISUAL CONSISTENCY
+
+Reuse existing:
+
+Button
+Badge
+Card
+Panel
+Input
+Textarea
+Select
+Divider
+Spinner
+AgentCard
+EvidenceCard
+VerdictBadge
+VerdictCard
+ConfidenceBar
+ProgressStep
+VerificationTimeline
+StatCard
+
+Do not create duplicate components if an existing component can be improved/reused.
+
+---
+
+# 20. IMPORTANT TECHNICAL CHECK
+
+Before finishing:
+
+Search the entire frontend for:
+
+- undefined Lucide icons
+- unused imports
+- missing components
+- invalid routes
+- console errors
+- broken imports
+- hardcoded external URLs that should not exist
+- fake buttons with no functionality
+
+Especially verify all icons imported into:
+
+VerificationLoading.tsx
+AgentAnalysisPanel.tsx
+VerificationReportView.tsx
+StatCard.tsx
+
+are actually exported by the installed icon library.
+
+Do not use an icon unless it exists.
+
+---
+
+# 21. VERIFICATION CHECKLIST
+
+Run:
 
 npm run lint
 
 npm run build
 
-Fix all errors.
-
 Then manually verify:
 
-1. `/`
-2. `/login`
-3. `/register`
-4. `/ui-preview`
-5. `/app/home`
-6. `/app/verify`
-7. `/app/history`
-8. `/app/settings`
+/app/home
+/app/verify
+/app/history
+/app/settings
 
 Test:
 
-### Verification
+1. Dashboard loads.
+2. Stats are aligned.
+3. New Verification CTA works.
+4. Verification form renders.
+5. Submit mock verification.
+6. Loading pipeline renders.
+7. Prosecutor renders.
+8. Defender renders.
+9. Adjudicator renders.
+10. Result renders.
+11. Evidence cards render.
+12. Verdict explanation renders.
+13. Suggested correction renders.
+14. Copy correction works.
+15. History renders.
+16. Search works.
+17. Verdict filtering works.
+18. View report works.
+19. Settings renders.
+20. Logout still works.
+21. No blank screen.
+22. No console ReferenceError.
+23. No horizontal overflow on mobile.
 
-- Empty claim rejected
-- Empty citation rejected
-- Valid claim accepted
-- Valid citation accepted
-- Verify button enters loading state
-- Progress stages change correctly
-- Prosecutor appears
-- Defender appears
-- Adjudicator appears
-- Final verdict appears
-- Confidence appears
-- Evidence cards appear
-- Suggested correction appears
-- Copy correction works
-- History entry is created
-- History entry can reopen result
-- Error state works
-- Mobile layout works
+---
 
-### Authentication
+# 22. SUCCESS CRITERIA
 
-Verify that protected routes still require authentication.
+The finished UI should no longer feel like:
 
-Do NOT break:
-- login
-- register
-- logout
-- session persistence
-- protected routing
+"basic CRUD dashboard."
 
-==================================================
-## 21. IMPORTANT IMPLEMENTATION RULE
-==================================================
+It should feel like:
 
-Before modifying files:
+"professional scientific verification workspace powered by a multi-agent evidence pipeline."
 
-1. Inspect the existing project structure.
-2. Inspect existing verification components.
-3. Inspect existing types.
-4. Inspect existing Zustand store.
-5. Inspect existing mock service.
-6. Understand how `/app/verify` currently works.
-7. Reuse existing architecture.
+The multi-agent architecture must remain the visual identity of the product:
 
-Do not blindly overwrite files.
+Claim
+↓
+Evidence
+↓
+Prosecutor + Defender
+↓
+Adjudicator
+↓
+Verdict
+↓
+Correction
 
-Make the smallest clean changes required.
+Do not change the underlying functionality.
 
-==================================================
-## 22. FINAL ACCEPTANCE CRITERIA
-==================================================
+Focus on visual hierarchy, information density, research credibility, consistency, accessibility, and polished UX.
 
-This phase is complete only when:
+At the end, provide a concise implementation report containing:
 
-✓ Existing authentication still works
-✓ Existing landing page is unchanged
-✓ `/ui-preview` still works
-✓ `/app/*` remains protected
-✓ `/app/verify` has polished input UX
-✓ Verification progress clearly shows the pipeline
-✓ Prosecutor / Defender / Adjudicator are visually distinct
-✓ Agent debate is easy to understand
-✓ Evidence cards are easy to inspect
-✓ Verdict explanation is clear
-✓ All five verdict types work
-✓ Confidence is displayed
-✓ Suggested correction works
-✓ Human approval warning is visible
-✓ Copy correction works
-✓ History works
-✓ Complete verification report is available
-✓ Empty/loading/error states exist
-✓ Responsive design works
-✓ No chatbot UI was introduced
-✓ No unnecessary dependencies were added
-✓ Mock verification still works
-✓ `npm run lint` passes
-✓ `npm run build` passes
+- files created
+- files modified
+- components reused
+- visual improvements
+- responsive improvements
+- accessibility improvements
+- lint result
+- build result
+- any remaining limitations
 
-==================================================
-## 23. FINAL OUTPUT
-==================================================
-
-When finished, provide a concise implementation report containing:
-
-1. Files created
-2. Files modified
-3. Components reused
-4. Features implemented
-5. Routes affected
-6. Mock verification behavior
-7. Tests performed
-8. `npm run lint` result
-9. `npm run build` result
-10. Any remaining limitations
-
-Do not claim real AI/backend functionality was implemented.
-
-The purpose of this phase is to make the SciVerify frontend completely ready for the real multi-agent verification backend in the next phase.
+Do NOT commit or push changes.

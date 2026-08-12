@@ -1,29 +1,22 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, Plus } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRight,
+  Ban,
+  CheckCircle2,
+  ClipboardList,
+  Plus,
+  XCircle,
+} from 'lucide-react'
 import { AppHeader } from '@/components/app/AppHeader'
+import { VerificationActivityCard } from '@/components/verification/VerificationActivityCard'
 import { computeDashboardStats } from '@/mocks/verification'
 import { useVerificationStore } from '@/stores/verificationStore'
 import { useUserDisplayName } from '@/hooks/useUserDisplayName'
 import { ROUTES } from '@/constants'
 import { Button } from '@/components/ui/Button'
 import { StatCard } from '@/components/sciverify/StatCard'
-import { VerdictBadge } from '@/components/sciverify/VerdictBadge'
-import { ConfidenceBar } from '@/components/sciverify/ConfidenceBar'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/Card'
 import { Panel } from '@/components/ui/Card'
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
-}
 
 export default function AppHomePage() {
   const displayName = useUserDisplayName()
@@ -35,7 +28,7 @@ export default function AppHomePage() {
     <div>
       <AppHeader
         title={`Welcome back, ${displayName}`}
-        description="Verify scientific claims against their cited evidence."
+        description="Evidence-backed verification for your scientific claims."
         actions={
           <Link to={ROUTES.APP_VERIFY}>
             <Button>
@@ -46,22 +39,72 @@ export default function AppHomePage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Total Verifications" value={stats.total} />
-        <StatCard label="Supported" value={stats.supports} />
-        <StatCard label="Overstated" value={stats.overstated} />
-        <StatCard label="Contradicted" value={stats.contradicts} />
-        <StatCard label="Fabricated" value={stats.fabricated} />
-      </div>
+      <section aria-label="Verification statistics">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard
+            label="Total Verifications"
+            value={stats.total}
+            description="All verification runs"
+            icon={<ClipboardList className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Supported"
+            value={stats.supports}
+            description="Evidence aligned"
+            icon={<CheckCircle2 className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Overstated"
+            value={stats.overstated}
+            description="Claims requiring review"
+            icon={<AlertTriangle className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Contradicted"
+            value={stats.contradicts}
+            description="Evidence conflicts"
+            icon={<XCircle className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Fabricated"
+            value={stats.fabricated}
+            description="Citation authenticity issue"
+            icon={<Ban className="h-4 w-4" />}
+          />
+        </div>
+      </section>
 
-      <section className="mt-10">
+      <Panel
+        padding="lg"
+        className="mt-8 border-primary/15 bg-gradient-to-br from-primary/5 via-surface-elevated/40 to-surface"
+      >
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl space-y-2">
+            <h2 className="text-lg font-semibold text-text-primary">
+              Verify a scientific claim
+            </h2>
+            <p className="text-sm leading-relaxed text-text-secondary">
+              Compare the claim against its cited evidence using Prosecutor,
+              Defender, and Adjudicator.
+            </p>
+          </div>
+          <Link to={ROUTES.APP_VERIFY} className="shrink-0">
+            <Button>
+              Start verification
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
+      </Panel>
+
+      <section className="mt-10" aria-label="Recent verification activity">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold text-text-primary">
-            Recent Verifications
+            Recent verification activity
           </h2>
           <Link
             to={ROUTES.APP_HISTORY}
-            className="text-sm text-primary hover:text-primary-hover"
+            className="text-sm text-primary transition-colors hover:text-primary-hover"
           >
             View all
           </Link>
@@ -77,39 +120,7 @@ export default function AppHomePage() {
         ) : (
           <div className="grid gap-4">
             {recentRecords.map((record) => (
-              <Card key={record.id}>
-                <CardHeader>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <CardTitle className="line-clamp-2 text-base">
-                        {record.claim}
-                      </CardTitle>
-                      <CardDescription className="line-clamp-1">
-                        {record.citation}
-                      </CardDescription>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <VerdictBadge verdict={record.verdict} size="sm" />
-                        <span className="text-xs text-text-muted">
-                          {formatDate(record.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                    <Link to={ROUTES.APP_VERIFY} state={{ recordId: record.id }}>
-                      <Button variant="outline" size="sm">
-                        View
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <ConfidenceBar
-                    value={record.confidence}
-                    verdict={record.verdict}
-                    size="sm"
-                  />
-                </CardContent>
-              </Card>
+              <VerificationActivityCard key={record.id} record={record} />
             ))}
           </div>
         )}

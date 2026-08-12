@@ -44,6 +44,10 @@ function resolveSourceHref(identifier?: string, sourceUrl?: string) {
   return undefined
 }
 
+function SectionDivider() {
+  return <div className="border-t border-border/70" aria-hidden />
+}
+
 export function EvidenceCard({
   title,
   excerpt,
@@ -62,23 +66,30 @@ export function EvidenceCard({
   const sourceLine = [authors, year?.toString(), source].filter(Boolean).join(' · ')
 
   return (
-    <Card className={cn('h-full', className)}>
-      <CardHeader className="space-y-4">
+    <Card
+      className={cn(
+        'h-full transition-all duration-200 motion-reduce:transition-none hover:border-border/80 hover:shadow-sm',
+        className,
+      )}
+    >
+      <CardHeader className="space-y-4 p-5 pb-0">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface-elevated">
               <Quote className="h-4 w-4 text-text-muted" />
             </span>
             <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+              <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
                 Source
               </p>
-              <CardTitle className="mt-1 text-sm leading-snug">{title}</CardTitle>
+              <CardTitle className="mt-2 text-sm leading-snug">{title}</CardTitle>
               {sourceLine ? (
-                <CardDescription className="mt-1">{sourceLine}</CardDescription>
+                <CardDescription className="mt-1 leading-relaxed">
+                  {sourceLine}
+                </CardDescription>
               ) : null}
               {identifier ? (
-                <p className="mt-1 truncate font-mono text-xs text-text-muted">
+                <p className="mt-2 truncate font-mono text-xs text-text-muted">
                   {identifier}
                 </p>
               ) : null}
@@ -87,31 +98,39 @@ export function EvidenceCard({
           {verdict ? <VerdictBadge verdict={verdict} size="sm" /> : null}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 pt-0">
-        <div className="rounded-lg border border-border/70 bg-surface-elevated/40 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
+
+      <CardContent className="space-y-4 p-5 pt-4">
+        <SectionDivider />
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
             Relevant evidence
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-            {excerpt}
+          <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+            &ldquo;{excerpt}&rdquo;
           </p>
         </div>
 
         {whyItMatters ? (
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
-              Why this matters
-            </p>
-            <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-              {whyItMatters}
-            </p>
-          </div>
+          <>
+            <SectionDivider />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-text-muted">
+                Why this matters
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-text-secondary">
+                {whyItMatters}
+              </p>
+            </div>
+          </>
         ) : null}
+
+        <SectionDivider />
 
         <div className="flex flex-wrap items-center gap-2">
           {strength ? (
             <Badge variant={strengthVariant[strength]} size="sm">
-              Strength: {strength}
+              Evidence strength: {strength}
             </Badge>
           ) : null}
           {relevance !== undefined ? (
@@ -126,7 +145,7 @@ export function EvidenceCard({
             href={href}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary-hover"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:text-primary-hover"
           >
             Open source
             <ExternalLink className="h-3.5 w-3.5" />
