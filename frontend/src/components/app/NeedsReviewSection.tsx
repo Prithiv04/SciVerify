@@ -22,7 +22,7 @@ export function NeedsReviewSection({
   const attentionCount = countNeedsReview(records)
 
   return (
-    <Panel padding="md" className={cn(className)}>
+    <Panel padding="md" className={cn('flex h-full flex-col', className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-text-primary">Needs review</h2>

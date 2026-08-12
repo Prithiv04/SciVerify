@@ -111,7 +111,7 @@ export default function AppHomePage() {
       </section>
 
       <section
-        className="grid gap-4 lg:grid-cols-2 lg:items-start"
+        className="grid gap-4 lg:grid-cols-2 lg:items-stretch"
         aria-label="Needs review and workspace insights"
       >
         <NeedsReviewSection

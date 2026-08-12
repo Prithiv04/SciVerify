@@ -23,11 +23,16 @@ function MetricBlock({
   children?: ReactNode
 }) {
   return (
-    <div className="rounded-lg border border-border/70 bg-surface/60 px-3 py-3">
-      <div className={cn('text-lg font-semibold tabular-nums leading-none text-text-primary', valueClassName)}>
+    <div className="flex h-full min-h-[5rem] flex-col justify-center rounded-lg border border-border/70 bg-surface/60 px-4 py-3">
+      <div
+        className={cn(
+          'font-semibold tabular-nums leading-none text-text-primary',
+          valueClassName ?? 'text-lg',
+        )}
+      >
         {children ?? value}
       </div>
-      <p className="mt-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+      <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-text-muted">
         {label}
       </p>
     </div>
@@ -42,11 +47,13 @@ export function WorkspaceInsights({
   const averageConfidence = computeAverageConfidence(records)
 
   return (
-    <Panel padding="md" className={cn(className)}>
-      <h2 className="text-sm font-semibold text-text-primary">Workspace insights</h2>
-      <p className="mt-1 text-xs text-text-muted">Demo verification environment</p>
+    <Panel padding="md" className={cn('flex h-full flex-col', className)}>
+      <div>
+        <h2 className="text-sm font-semibold text-text-primary">Workspace insights</h2>
+        <p className="mt-1 text-xs text-text-muted">Demo verification environment</p>
+      </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+      <div className="mt-4 grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3 sm:items-stretch">
         <MetricBlock
           value="System ready"
           label="Verification health"
@@ -71,7 +78,7 @@ export function WorkspaceInsights({
         />
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-text-muted">
+      <p className="mt-auto pt-4 text-[11px] leading-relaxed text-text-muted">
         Results are simulated demo data and do not reflect live scientific
         verification.
       </p>
