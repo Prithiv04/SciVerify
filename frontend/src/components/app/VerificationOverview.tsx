@@ -1,23 +1,15 @@
 import { cn } from '@/lib/cn'
+import { computeVerificationSummary } from '@/lib/dashboard-selectors'
 import { getVerdictConfig, VERDICT_KEYS } from '@/constants/verdicts'
 import type { VerdictKey } from '@/constants/verdicts'
-import type { DashboardStats } from '@/types/verification'
+import type { DashboardStats, VerificationResult } from '@/types/verification'
 import { Divider } from '@/components/ui/Divider'
 import { Panel } from '@/components/ui/Card'
 
 export interface VerificationOverviewProps {
   stats: DashboardStats
+  records: VerificationResult[]
   className?: string
-}
-
-function computeSummary(stats: DashboardStats) {
-  return {
-    totalRuns: stats.total,
-    evidenceAligned: stats.supports,
-    needsReview: stats.overstated + stats.insufficient,
-    evidenceConflicts: stats.contradicts,
-    citationIssues: stats.fabricated,
-  }
 }
 
 const summaryRows = [
@@ -28,7 +20,11 @@ const summaryRows = [
   { key: 'citationIssues', label: 'Citation issues' },
 ] as const
 
-export function VerificationOverview({ stats, className }: VerificationOverviewProps) {
+export function VerificationOverview({
+  stats,
+  records,
+  className,
+}: VerificationOverviewProps) {
   const counts: Record<VerdictKey, number> = {
     SUPPORTS: stats.supports,
     OVERSTATED: stats.overstated,
@@ -38,7 +34,7 @@ export function VerificationOverview({ stats, className }: VerificationOverviewP
   }
 
   const maxCount = Math.max(...VERDICT_KEYS.map((key) => counts[key]), 1)
-  const summary = computeSummary(stats)
+  const summary = computeVerificationSummary(stats, records)
 
   return (
     <Panel padding="lg" className={cn('flex h-full flex-col', className)}>

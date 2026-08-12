@@ -1,239 +1,555 @@
-# Phase 5.2.1 — Final Dashboard Refinements
+# Phase 5.3 — Professional SciVerify Dashboard Completion
 
-The SciVerify dashboard is already implemented and working.
+## Objective
 
-Make ONLY the following 3 visual/content refinements.
+Upgrade the existing authenticated `/app/home` dashboard from a polished MVP dashboard into a professional, research-grade workspace.
 
-IMPORTANT:
-Do not redesign the entire dashboard.
-Do not modify authentication, Supabase, routes, verification logic, Zustand state, history behavior, or settings.
-Do not add new dependencies unless absolutely necessary.
-Preserve the existing design system and components.
+The dashboard already has:
+
+- Welcome header
+- New Verification CTA
+- Verification statistics
+- Verification Overview
+- Verification Summary
+- Claim Challenger → Evidence Defender → Final Reviewer workflow
+- Recent Verification Activity
+- History page
+- Existing responsive layout
+- Supabase authentication
+- Existing Zustand verification state
+- Existing mock verification data
+
+DO NOT rebuild existing functionality.
+
+This phase is focused on:
+1. Professional dashboard UX
+2. Useful workspace insights
+3. Quick actions
+4. Needs-review workflow
+5. Correct historical report navigation
+6. Empty-state polish
+7. Responsive and visual refinement
 
 ---
 
-## 1. Fix duplicated citation/source text
+# PRIORITY 0 — Exact Historical Verification Report Navigation
 
-There is currently a duplicated source/reference line in some Recent Verification Activity cards.
+This is the most important requirement.
 
-Example:
+## Current problem
 
-Insufficient
-58%
+The "View report" links in Recent Verification Activity currently point to:
 
-The dataset proves universal efficacy with no observed adverse events.
+`/app/verify`
 
-Demo unpublished manuscript reference text
-Demo unpublished manuscript reference text
+This can open the generic verification page instead of the specific historical verification.
 
+## Required behavior
+
+When the user clicks:
+
+`View report`
+
+for a historical verification, open the EXACT verification result associated with that record.
+
+Expected flow:
+
+Recent Verification
+        ↓
+View report
+        ↓
+Full Verification Report
+        ↓
+Claim
+Citation
+Citation authenticity
+Agent debate
+Evidence
+Final verdict
 Confidence
-58%
+Suggested correction
 
-The source/reference should appear ONLY ONCE.
+## Implementation
+
+Use the existing verification ID / record identity wherever possible.
+
+Do NOT create duplicate verification data.
+
+Do NOT introduce a backend/database requirement in this phase.
+
+If the current Zustand store is the source of truth, use it to retrieve the selected verification.
+
+The report should render using the existing:
+
+- VerificationReportView
+- VerdictExplanation
+- AgentAnalysisPanel
+- EvidenceCard
+- SuggestedCorrectionPanel
+- Existing verification types
+
+If route state is already being used, improve it rather than creating a parallel system.
+
+Prefer a stable route/state approach such as:
+
+`/app/verify/:verificationId`
+
+if that fits the existing routing architecture.
+
+Do NOT break the existing `/app/verify` new-verification route.
 
 Expected:
 
-Insufficient    58%
+`/app/verify` → New Verification
 
-The dataset proves universal efficacy with no observed adverse events.
+`/app/verify/:verificationId` → Existing Verification Report
 
-Demo unpublished manuscript reference text
-
-Confidence
-58%
-Aug 4, 2026
-View report
-
-Inspect the data mapping and component rendering to determine why the source is being displayed twice.
-
-IMPORTANT:
-- Fix the underlying rendering issue rather than hiding one copy with CSS.
-- Make sure all recent verification cards display citation/source information exactly once.
-- Preserve all existing source information.
-- Handle DOI, URL, citation, and reference-text source types correctly.
+If using a route parameter, update routing carefully while preserving authentication protection.
 
 ---
 
-## 2. Improve the Verification Overview visualization
+# PRIORITY 1 — Quick Actions
 
-Current section:
-
-Verification overview
-Distribution of verification outcomes across your workspace.
-
-Supports
-1
-
-Overstated
-2
-
-Contradicted
-1
-
-Insufficient
-1
-
-Fabricated
-1
-
-Keep the existing data and section, but make it more visually informative.
-
-Create compact horizontal distribution bars.
+Add a compact "Quick Actions" section to the dashboard.
 
 Example:
 
-Verification overview
-Distribution of verification outcomes
+Quick Actions
 
-Supports       ████████                 1
-Overstated     ████████████████         2
-Contradicted   ████████                 1
-Insufficient   ████████                 1
-Fabricated     ████████                 1
+[ + New Verification ]   [ View History ]   [ Recent Reports ]
+
+## Requirements
+
+### New Verification
+
+Navigate to:
+
+`/app/verify`
+
+### View History
+
+Navigate to:
+
+`/app/history`
+
+### Recent Reports
+
+Navigate to the most recent verification report.
+
+If there is no verification history, disable or gracefully handle this action.
+
+Use existing Button components and design-system styles.
+
+Do not create unnecessary new button styles.
+
+The section should feel like a professional workspace toolbar rather than a large card.
+
+---
+
+# PRIORITY 2 — Verification Health / Workspace Status
+
+Add a small workspace-status section.
+
+Example:
+
+Verification health
+
+● System ready
+
+6 verification runs
+83% average confidence
+
+## Requirements
+
+Use existing verification data/state.
+
+Do NOT hardcode values.
+
+The status should reflect the current application state.
+
+For example:
+
+System ready
+
+when the frontend verification system is available.
+
+If the application has an error/unavailable state, make the component capable of representing that state without breaking the UI.
+
+## IMPORTANT
+
+Current verification runs are MOCK verification runs.
+
+Do not imply that the displayed results came from real scientific APIs or real AI agents.
+
+Use subtle wording such as:
+
+"Demo verification environment"
+
+or
+
+"Mock verification data"
+
+where appropriate.
+
+Do not clutter the dashboard with warnings.
+
+---
+
+# PRIORITY 3 — Average Confidence
+
+Add an Average Confidence metric.
+
+Example:
+
+Average Confidence
+
+76.2%
+
+Across 6 verifications
+
+## Requirements
+
+Calculate this dynamically from existing verification records.
+
+Do NOT hardcode:
+
+76.2%
+
+Use the actual confidence values.
+
+Handle:
+
+- No verification records
+- One verification
+- Multiple verifications
+
+Round the displayed percentage appropriately, preferably to one decimal place.
+
+Example:
+
+76.2%
+
+Do not create a chart for this.
+
+Keep it visually consistent with the existing StatCard/design system.
+
+---
+
+# PRIORITY 4 — Needs Review
+
+Add a "Needs Review" section.
+
+This should highlight verification results that deserve user attention.
+
+Example:
+
+Needs Review                         View all →
+
+2 claims require attention
+
+⚠ Overstated
+AI improves software development...
+76% confidence
+
+⚠ Insufficient
+The dataset proves universal efficacy...
+58% confidence
+
+## Requirements
+
+Derive this dynamically from verification data.
+
+Do NOT hardcode the records.
+
+Prioritize verdicts such as:
+
+- OVERSTATED
+- CONTRADICTS
+- INSUFFICIENT
+- FABRICATED
+
+SUPPORTS results should normally NOT appear in Needs Review.
+
+Use the existing verdict types and semantic styling.
+
+Each item should show:
+
+- Verdict
+- Claim
+- Confidence
+- Appropriate source/citation information when available
+- View report action
+
+Clicking the item or "View report" must open the exact verification report.
+
+## View all
+
+Navigate to:
+
+`/app/history`
+
+Optionally preserve an appropriate filter if the existing History page supports it.
+
+Do not introduce complex filtering logic unless already supported.
+
+---
+
+# PRIORITY 5 — Recent Activity Empty State
+
+The dashboard already has Recent Verification Activity.
+
+Make its empty state polished.
+
+When there are no verification records:
+
+No verification runs yet
+
+Start your first evidence-backed citation
+verification to see results here.
+
+[ Start Verification ]
 
 Requirements:
 
-- Use the existing verification statistics/store data.
-- NEVER hardcode the counts.
-- Calculate bar widths dynamically based on the largest verdict count.
-- Each verdict gets its existing semantic styling.
-- Display:
-  - verdict label
-  - horizontal bar
-  - count
-- Keep the visualization compact.
-- Use CSS/Tailwind where possible.
-- Do not install a charting library.
-- Add subtle animation only if it already fits the existing design system.
-- Make zero-count categories display correctly.
-- Make it responsive.
-- Ensure sufficient contrast and accessibility.
-- Do not turn this into a large analytics chart.
+- Center content appropriately
+- Use an existing icon/illustration component if available
+- Keep the design minimal
+- CTA navigates to `/app/verify`
+- Do not create a huge empty-state illustration
+- Do not add unnecessary animations
 
-The section should remain consistent with the existing SciVerify dark research UI.
+The same principle should apply to:
+
+- Needs Review
+- Verification Overview
+- Recent Activity
+
+when there is no data.
 
 ---
 
-## 3. Strengthen the Prosecutor → Defender → Adjudicator presentation
+# PRIORITY 6 — Dashboard Layout
 
-Improve the existing "Verify a scientific claim" CTA card.
+Organize the dashboard into a clear hierarchy.
 
-Current concept:
+Recommended structure:
 
-Verify a scientific claim
-Run a multi-agent evidence check
+1. Welcome Header
+2. Quick Actions
+3. Primary Statistics
+4. Overview + Verification Workflow
+5. Needs Review + Workspace Insights
+6. Recent Verification Activity
 
-Compare a claim against its cited evidence using three specialized verification agents.
+Conceptual layout:
 
-Prosecutor
-Challenges the claim
+┌─────────────────────────────────────────────────────┐
+│ Welcome back, Prithiv R              [+ New Verify] │
+│ Evidence-backed verification...                     │
+└─────────────────────────────────────────────────────┘
 
-Defender
-Builds supporting case
+Quick Actions
 
-Adjudicator
-Final evidence decision
+[ + New Verification ] [ View History ] [ Recent Reports ]
 
-Start verification
 
-Make the three-agent workflow visually connected.
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│ Total  │ │Support │ │Overst. │ │Contrad.│ │Fabric. │
+│   6    │ │   1    │ │   2    │ │   1    │ │   1    │
+└────────┘ └────────┘ └────────┘ └────────┘ └────────┘
 
-### Desktop target
 
-Display the agents horizontally:
+┌──────────────────────────────┐ ┌──────────────────────┐
+│ Verification Overview        │ │ Verify a Claim       │
+│                              │ │                      │
+│ Supports      ████ 1        │ │ Claim Challenger     │
+│ Overstated    ████████ 2    │ │        ↓             │
+│ Contradicted  ████ 1        │ │ Evidence Defender    │
+│ Insufficient  ████ 1        │ │        ↓             │
+│ Fabricated    ████ 1        │ │ Final Reviewer       │
+│                              │ │                      │
+│ Verification Summary         │ │ [Start Verification] │
+└──────────────────────────────┘ └──────────────────────┘
 
-⚔ Prosecutor  ───→  🛡 Defender  ───→  ⚖ Adjudicator
 
-Each agent should remain a distinct visual block/card.
+┌──────────────────────────────┐ ┌──────────────────────┐
+│ Needs Review                 │ │ Workspace Insights   │
+│                              │ │                      │
+│ Overstated     76%           │ │ Avg confidence 76%   │
+│ Insufficient   58%           │ │ Total runs      6    │
+│                              │ │ System ready ●       │
+│ View all →                   │ │                      │
+└──────────────────────────────┘ └──────────────────────┘
 
-Prosecutor
-Challenges the claim
 
-Defender
-Builds supporting case
+┌─────────────────────────────────────────────────────┐
+│ Recent Verification Activity          View all →    │
+│                                                     │
+│ Overstated 76%  AI improves...       View report   │
+│ Contradicted 82% Meta-analysis...    View report   │
+│ Supported 91%  Compound...           View report   │
+└─────────────────────────────────────────────────────┘
 
-Adjudicator
-Final evidence decision
-
-Use subtle connecting lines/arrows between the three stages.
-
-### Mobile target
-
-Stack them vertically:
-
-⚔ Prosecutor
-Challenges the claim
-        ↓
-🛡 Defender
-Builds supporting case
-        ↓
-⚖ Adjudicator
-Final evidence decision
-
-Requirements:
-
-- Reuse existing AgentCard/icons/components where appropriate.
-- Keep the existing agent names exactly:
-  - Prosecutor
-  - Defender
-  - Adjudicator
-- Keep the existing descriptions.
-- Do not create fake live-status animations.
-- Keep "Start verification" functional and pointing to `/app/verify`.
-- Make the flow visually obvious.
-- Keep the design subtle and research-grade.
-- Do not make the card excessively large.
-- Maintain responsive behavior.
-
-The goal is to make it immediately obvious that SciVerify uses a three-agent verification process.
+This is a conceptual layout, not a requirement to reproduce it pixel-for-pixel.
 
 ---
 
-# DESIGN CONSTRAINTS
+# PRIORITY 7 — Responsive Design
 
-Keep the current SciVerify design language:
+Desktop:
 
-- Dark
-- Premium
-- Research-focused
-- Clean
-- Professional
-- Minimal
-- Evidence-oriented
+- Use the available horizontal space efficiently.
+- Keep cards aligned.
+- Avoid excessive empty space.
+- Maintain consistent card heights where appropriate.
 
-Avoid:
+Tablet:
 
-- Excessive gradients
-- Neon effects
-- Gaming-style UI
-- Chatbot styling
-- Excessive animations
-- Large unnecessary charts
-- New dashboard sections
-- New functionality
+- Allow overview/workflow and insight sections to stack naturally.
+- Avoid cramped horizontal cards.
+
+Mobile:
+
+- Single-column layout.
+- Quick actions can wrap or stack.
+- Statistics should remain readable.
+- No horizontal scrolling.
+- No text truncation.
+- Buttons should remain easy to tap.
+- Agent workflow remains vertical.
+- Recent activity cards should remain readable.
 
 ---
 
-# DO NOT CHANGE
+# PRIORITY 8 — Visual Polish
 
-Do not modify:
+Maintain the existing SciVerify visual identity.
 
-- Supabase
-- Authentication
-- Database
-- RLS
-- Routes
-- Verification service
-- VerificationStore
-- VerificationResult
-- History functionality
-- Settings
-- Landing page
-- `/app/verify`
-- `/app/history`
-- `/app/settings`
+Keep:
 
-Only make the three requested dashboard refinements.
+- Dark research-focused aesthetic
+- Existing typography
+- Existing semantic verdict colors
+- Existing card components
+- Existing borders
+- Existing spacing system
+- Existing icons
+- Existing buttons
+- Existing Tailwind conventions
+
+Improve only where necessary:
+
+- Consistent spacing
+- Alignment
+- Card heights
+- Section hierarchy
+- Typography hierarchy
+- Hover states
+- Focus states
+- Responsive behavior
+
+Avoid excessive glassmorphism, gradients, animations, shadows, or decorative effects.
+
+SciVerify should feel like a serious scientific research tool.
+
+---
+
+# DATA REQUIREMENTS
+
+Use the existing verification state/store and types.
+
+Do NOT introduce duplicate state.
+
+Do NOT hardcode:
+
+- Total verification count
+- Verdict counts
+- Average confidence
+- Needs Review records
+- Recent activity
+- Workspace statistics
+
+Everything should derive from the existing verification records.
+
+If helper selectors/functions are useful, create reusable selectors rather than duplicating calculations across components.
+
+---
+
+# COMPONENT ARCHITECTURE
+
+Before creating new components, inspect existing components.
+
+Reuse:
+
+- StatCard
+- VerdictBadge
+- VerdictCard
+- ConfidenceBar
+- Card
+- Panel
+- Button
+- Badge
+- existing verification components
+- existing layout components
+
+Create new components only when they represent a meaningful reusable UI section.
+
+Possible components:
+
+- DashboardQuickActions
+- WorkspaceHealthCard
+- NeedsReviewCard
+- DashboardInsights
+
+Use the project's existing naming and folder conventions.
+
+Do not over-componentize simple markup.
+
+---
+
+# DO NOT IMPLEMENT
+
+Do NOT add:
+
+- Chatbot
+- AI assistant
+- Notifications
+- Team collaboration
+- Calendar
+- Social features
+- User profile customization
+- Huge analytics dashboards
+- Pie charts
+- Donut charts
+- Activity heatmaps
+- Complex data visualization
+- PDF editor
+- Manuscript editor
+- Dark/light mode
+- Billing
+- Real-time notifications
+
+These are outside this phase.
+
+---
+
+# IMPORTANT PRODUCT CONSTRAINT
+
+The current verification system is still MOCK-ONLY.
+
+Do not represent mock verification results as real scientific verification.
+
+Do not add claims such as:
+
+"AI verified this paper"
+
+or
+
+"Scientific evidence confirmed"
+
+unless the existing data explicitly supports that behavior.
+
+Use the existing demo/mock terminology where appropriate.
 
 ---
 
@@ -249,24 +565,62 @@ npm run lint
 
 npm run build
 
-3. Open `/app/home`.
+3. Open:
+
+`/app/home`
 
 4. Verify:
-   - No duplicated source/citation text.
-   - Verification Overview has dynamic horizontal bars.
-   - Counts are correct.
-   - Prosecutor → Defender → Adjudicator flow is visually connected.
-   - Desktop layout works.
-   - Mobile layout works.
-   - "Start verification" still navigates to `/app/verify`.
-   - Existing Recent Verification "View report" buttons still work.
-   - No existing dashboard functionality is broken.
 
-Do not commit or push anything.
+- Quick Actions work
+- New Verification opens `/app/verify`
+- View History opens `/app/history`
+- Recent Reports opens the latest actual report
+- Average Confidence is calculated dynamically
+- Needs Review is dynamically generated
+- View report opens the correct verification
+- Empty states work when no verification data exists
+- Verification Overview still works
+- Agent workflow remains intact
+- Recent activity remains intact
+- Mobile layout works
+- No text truncation
+- No horizontal overflow
 
-At the end, provide a concise implementation report listing:
-- Files changed
-- What was fixed
-- Lint result
-- Build result
-- Any remaining issues
+5. Verify that existing routes still work:
+
+`/`
+`/login`
+`/register`
+`/app/home`
+`/app/verify`
+`/app/history`
+`/app/settings`
+`/ui-preview`
+
+6. Do NOT modify Supabase configuration.
+
+7. Do NOT modify authentication behavior.
+
+8. Do NOT commit or push changes.
+
+## Definition of Done
+
+The dashboard should feel like a complete professional research workspace rather than a collection of UI cards.
+
+A user should be able to:
+
+Open dashboard
+    ↓
+Understand workspace status
+    ↓
+See verification statistics
+    ↓
+Identify claims needing review
+    ↓
+Start a new verification
+    ↓
+Open an exact historical report
+    ↓
+Review previous verification activity
+
+The final UI should be clean, restrained, research-grade, responsive, and information-dense without becoming cluttered.

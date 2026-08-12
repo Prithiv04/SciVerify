@@ -2,9 +2,8 @@ import { Link } from 'react-router-dom'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { VerdictBadge } from '@/components/sciverify/VerdictBadge'
-import { ConfidenceBar } from '@/components/sciverify/ConfidenceBar'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
-import { ROUTES } from '@/constants'
+import { verificationReportPath } from '@/constants'
 import type { VerificationResult } from '@/types/verification'
 
 export interface VerificationActivityCardProps {
@@ -63,15 +62,20 @@ export function VerificationActivityCard({
       )}
     >
       <CardHeader className="space-y-4 p-5 pb-0">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <VerdictBadge verdict={record.verdict} size="sm" />
-          <span className="text-base font-semibold tabular-nums text-text-primary">
-            {record.confidence}%
-          </span>
+          <div className="text-right">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+              Confidence
+            </p>
+            <p className="text-lg font-semibold tabular-nums leading-none text-text-primary">
+              {record.confidence}%
+            </p>
+          </div>
         </div>
 
         <div className="space-y-3">
-          <p className="line-clamp-2 text-sm font-medium leading-relaxed text-text-primary">
+          <p className="text-sm font-medium leading-relaxed text-text-primary">
             {record.claim}
           </p>
           <div className="space-y-1 border-l-2 border-border/80 pl-3">
@@ -79,10 +83,8 @@ export function VerificationActivityCard({
               <p
                 key={`${record.id}-${line}`}
                 className={cn(
-                  'line-clamp-2 text-xs leading-relaxed',
-                  record.evidence[0]?.identifier?.trim() === line
-                    ? 'font-mono text-text-muted'
-                    : 'text-text-secondary',
+                  'text-xs leading-relaxed text-text-secondary',
+                  record.evidence[0]?.identifier?.trim() === line && 'font-mono',
                 )}
               >
                 {line}
@@ -92,22 +94,14 @@ export function VerificationActivityCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 p-5 pt-4">
-        <ConfidenceBar
-          value={record.confidence}
-          verdict={record.verdict}
-          size="sm"
-          label="Confidence"
-        />
-
-        <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+      <CardContent className="p-5 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <span className="text-xs text-text-muted">
             {formatDate(record.createdAt)}
           </span>
           <Link
-            to={ROUTES.APP_VERIFY}
-            state={{ recordId: record.id }}
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none"
+            to={verificationReportPath(record.id)}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-primary-hover"
           >
             View report
             <ArrowRight className="h-3.5 w-3.5" />

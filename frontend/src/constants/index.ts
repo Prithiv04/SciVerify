@@ -14,3 +14,7 @@ export const ROUTES = {
   APP_HISTORY: '/app/history',
   APP_SETTINGS: '/app/settings',
 } as const
+
+export function verificationReportPath(verificationId: string) {
+  return `/app/verify/${verificationId}`
+}

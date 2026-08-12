@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Filter, Search } from 'lucide-react'
 import { AppHeader } from '@/components/app/AppHeader'
 import { VerificationActivityCard } from '@/components/verification/VerificationActivityCard'
+import { sortRecordsByDate } from '@/lib/dashboard-selectors'
 import { useVerificationStore } from '@/stores/verificationStore'
 import { ROUTES } from '@/constants'
 import { getVerdictConfig, VERDICT_KEYS } from '@/constants/verdicts'
@@ -18,7 +19,9 @@ export default function HistoryPage() {
   const [verdictFilter, setVerdictFilter] = useState<'all' | VerdictKey>('all')
 
   const filteredRecords = useMemo(() => {
-    return records.filter((record) => {
+    const sorted = sortRecordsByDate(records)
+
+    return sorted.filter((record) => {
       const matchesSearch =
         search.trim().length === 0 ||
         record.claim.toLowerCase().includes(search.toLowerCase()) ||
