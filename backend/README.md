@@ -9,7 +9,8 @@ FastAPI backend for the SciVerify evidence-backed citation verification platform
 | 1 | Complete | FastAPI scaffold, health check, CORS |
 | 2 | Complete | DOI citation resolver (Crossref → OpenAlex) |
 | 3 | Complete | Paper metadata & content retrieval, evidence chunking |
-| 4+ | Planned | Evidence ranking, agents, persistence |
+| 4 | Complete | Deterministic evidence retrieval & ranking |
+| 5+ | Planned | Multi-agent verification, persistence |
 
 ## Prerequisites
 
@@ -213,6 +214,85 @@ curl -X POST http://127.0.0.1:8001/api/papers/retrieve \
 | 400 | Invalid DOI |
 | 404 | Paper not found |
 | 503 | External provider or document download failure |
+
+## Evidence retrieval (Milestone 4)
+
+`POST /api/evidence/retrieve` ranks the most relevant evidence chunks from a paper against a scientific claim.
+
+**This milestone performs deterministic evidence retrieval and ranking. It does not produce the final scientific verdict.**
+
+### Retrieval flow
+
+1. Validate and preprocess the claim (normalization, token extraction, numeric extraction)
+2. Retrieve the paper and evidence chunks via the existing Milestone 3 pipeline
+3. Score every chunk deterministically against the claim
+4. Return the highest-ranked evidence items
+
+### Scoring approach
+
+Each chunk receives a bounded `relevance_score` between 0 and 1 based on:
+
+| Component | Weight | Description |
+|-----------|--------|-------------|
+| Token overlap | 50% | Share of meaningful claim tokens present in the chunk |
+| Phrase overlap | 25% | Bonus for consecutive claim phrases found in the chunk |
+| Numeric overlap | 15% | Whether numeric claims align (`1.0` exact match, `0.5` different values, `0.0` missing) |
+| Section weight | 10% | Preference for Results/Methods over References |
+
+Section weighting influences ranking only. It does not determine correctness.
+
+### Example request
+
+```bash
+curl -X POST http://127.0.0.1:8001/api/evidence/retrieve \
+  -H "Content-Type: application/json" \
+  -d "{\"claim\": \"The method improves accuracy by 40%.\", \"doi\": \"10.1038/s41586-020-2649-2\"}"
+```
+
+### Example response
+
+```json
+{
+  "status": "success",
+  "claim": "The method improves accuracy by 40%.",
+  "paper": {
+    "paper_id": "10.1038/s41586-020-2649-2",
+    "doi": "10.1038/s41586-020-2649-2",
+    "title": "Array programming with NumPy"
+  },
+  "evidence": [
+    {
+      "chunk_id": "10.1038/s41586-020-2649-2:Results:0",
+      "section": "Results",
+      "chunk_index": 0,
+      "text": "The proposed method improves accuracy by 12% on benchmark tasks.",
+      "relevance_score": 0.78,
+      "claim_overlap": 0.75,
+      "numeric_overlap": 0.5,
+      "claim_numbers": ["40%"],
+      "evidence_numbers": ["12%"],
+      "source_url": "https://example.org/paper.pdf",
+      "page": 4
+    }
+  ],
+  "total_chunks_considered": 25
+}
+```
+
+### Evidence retrieval HTTP status codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Evidence response returned (including no chunks / unavailable full text cases) |
+| 400 | Invalid claim or DOI |
+| 404 | Paper not found |
+| 503 | External provider or document download failure |
+
+### Limitations
+
+- Deterministic token/phrase matching — no embeddings or LLM ranking yet
+- Cannot produce SUPPORTS/OVERSTATED/CONTRADICTS verdicts (reserved for future agents)
+- Requires Milestone 3 to produce chunks; metadata-only papers return empty evidence
 
 ## Tests
 

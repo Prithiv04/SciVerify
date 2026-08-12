@@ -1,568 +1,405 @@
-# SciVerify — Phase 6, Milestone 3 Implementation Plan
-## Paper Metadata & Content Retrieval
-
-You are working on the SciVerify repository.
-
-The project currently has:
-
-- A completed React/Vite frontend with mock verification workflow
-- A FastAPI backend scaffold
-- Phase 6 Milestone 1 completed:
-  - FastAPI application
-  - CORS
-  - GET /api/health
-- Phase 6 Milestone 2 completed:
-  - DOI normalization
-  - Crossref citation resolver
-  - OpenAlex fallback
-  - POST /api/citations/resolve
-  - 17 citation resolver tests
-- Frontend is still intentionally using mock verification data
-- Git cleanup has been completed
-- Changes have already been committed and pushed
-
-Do NOT modify the frontend verification workflow in this milestone.
-
-The goal of Milestone 3 is to build a reliable backend pipeline that can take a resolved DOI/citation and retrieve accessible scientific paper metadata and content, normalize it, parse it, and split it into evidence-ready chunks.
-
---------------------------------------------------
-## CORE OBJECTIVE
---------------------------------------------------
-
-Build this pipeline:
-
-DOI
- ↓
-Citation Resolver
- ↓
-Normalized Paper Metadata
- ↓
-Full-text Discovery
- ↓
-Accessible PDF/HTML Retrieval
- ↓
-Document Parsing
- ↓
-Section Detection
- ↓
-Text Cleaning
- ↓
-Evidence Chunking
- ↓
-Evidence-ready paper representation
-
-This milestone must prepare the backend for Milestone 4:
-Evidence Retrieval / Ranking.
-
-Do NOT implement the three verification agents yet.
-
-Do NOT implement the LLM verification pipeline yet.
-
---------------------------------------------------
-## IMPORTANT CONSTRAINTS
---------------------------------------------------
-
-1. Inspect the existing repository before modifying anything.
-
-2. Reuse existing:
-   - DOI normalization
-   - CitationMetadata
-   - citation resolver
-   - FastAPI architecture
-   - existing environment configuration
-   - existing test conventions
-
-3. Do not duplicate DOI normalization or citation-resolution logic.
-
-4. Do not break:
-   - GET /api/health
-   - POST /api/citations/resolve
-   - existing citation resolver tests
-   - frontend build
-   - frontend mock verification workflow
-
-5. Do not add unnecessary dependencies.
-
-6. Do not scrape or bypass paywalls.
-
-7. Only retrieve publicly accessible content.
-
-8. Do not require API keys for basic Crossref/OpenAlex metadata retrieval unless the existing architecture already supports optional keys.
-
-9. External provider failures must be handled gracefully.
-
-10. Do not hard-code secrets.
-
-11. Keep provider URLs configurable through environment variables.
-
-12. Do not modify frontend files unless absolutely necessary. Prefer zero frontend changes for this milestone.
-
-13. Do not commit or push changes.
-
---------------------------------------------------
-## PHASE 3.1 — PAPER DATA MODEL
---------------------------------------------------
-
-Create a normalized paper representation.
-
-Suggested file:
-
-backend/app/schemas/paper.py
-
-Create appropriate Pydantic models.
-
-At minimum support:
-
-PaperMetadata
-
-Fields should include approximately:
-
-- paper_id
-- doi
-- title
-- authors
-- abstract
-- journal
-- publisher
-- publication_date
-- year
-- url
-- source_url
-- open_access
-- full_text_available
-- full_text_format
-- full_text_url
-
-Use appropriate optional types.
-
-Do not make fields mandatory when providers commonly omit them.
-
-Create models for:
-
-- PaperMetadata
-- RetrievePaperRequest
-- RetrievePaperResponse
-- DocumentSection
-- EvidenceChunk
-
-Adapt naming/types to the existing project conventions rather than blindly copying this specification.
-
---------------------------------------------------
-## PHASE 3.2 — PAPER RETRIEVAL SERVICE
---------------------------------------------------
-
-Create:
-
-backend/app/services/paper_retriever.py
-
-The service should:
-
-1. Accept a DOI or normalized citation identifier.
-2. Reuse the existing citation resolver.
-3. Obtain normalized metadata.
-4. Determine whether accessible full text exists.
-5. Discover the best available full-text source.
-6. Return a normalized paper object.
-
-Do not duplicate Crossref/OpenAlex metadata parsing if it can be reused cleanly.
-
-Create clear service-level exceptions.
-
-For example:
-
-- PaperNotFoundError
-- FullTextUnavailableError
-- PaperProviderError
-- DocumentRetrievalError
-
-Use names that fit the existing architecture.
-
---------------------------------------------------
-## PHASE 3.3 — FULL-TEXT DISCOVERY
---------------------------------------------------
-
-Implement public full-text discovery.
-
-Preferred strategy:
-
-1. OpenAlex metadata
-2. Open-access location
-3. Public PDF URL
-4. Public HTML URL
-5. Other explicitly accessible source URL
-
-Do not:
-
-- bypass authentication
-- bypass paywalls
-- use illegal mirrors
-- scrape restricted content
-- fabricate a full-text URL
-
-If metadata exists but full text is unavailable, return a valid response indicating:
-
-full_text_available = false
-
-This should NOT automatically be treated as a server failure.
-
-The system must distinguish:
-
-SUCCESS
-METADATA_ONLY
-FULL_TEXT_UNAVAILABLE
-NOT_FOUND
-PROVIDER_ERROR
-
-Use a clean enum or equivalent representation where appropriate.
-
---------------------------------------------------
-## PHASE 3.4 — DOCUMENT DOWNLOAD
---------------------------------------------------
-
-Create a dedicated document retrieval service, for example:
-
-backend/app/services/document_retriever.py
-
-Responsibilities:
-
-- HTTP GET accessible document
-- reasonable timeout
-- follow redirects safely
-- validate response status
-- inspect Content-Type
-- prevent obviously unsupported content
-- enforce a sensible maximum document size
-- return bytes/text plus detected format
-
-Supported formats:
-
-- PDF
-- HTML
-
-Do not support arbitrary binary files.
-
-Handle:
-
-- timeout
-- connection error
-- HTTP errors
-- invalid content type
-- oversized documents
-- malformed responses
-
-with clear exceptions.
-
---------------------------------------------------
-## PHASE 3.5 — DOCUMENT PARSING
---------------------------------------------------
-
-Create:
-
-backend/app/services/document_parser.py
-
-Implement:
-
-PDF → text
-HTML → text
-
-Use lightweight, well-maintained Python libraries.
-
-Before adding a dependency, inspect requirements.txt.
-
-Possible libraries may include:
-
-- pypdf
-- beautifulsoup4
-
-Only add what is actually necessary.
-
-The parser should return structured content rather than one giant unstructured string.
+You are implementing Phase 6 — Milestone 4 of the SciVerify project.
+
+IMPORTANT:
+- First inspect the existing repository and understand the architecture from Milestones 1–3.
+- Do NOT modify the frontend.
+- Do NOT implement the Prosecutor, Defender, or Adjudicator agents yet.
+- Do NOT add an LLM API or vector database yet.
+- Reuse the existing paper retrieval and evidence chunking infrastructure.
+- Keep the implementation modular, deterministic, testable, and production-oriented.
+- Do NOT break any existing functionality.
+
+==================================================
+MILESTONE 4 — EVIDENCE RETRIEVAL & RANKING
+==================================================
+
+Goal:
+
+Build the backend evidence retrieval layer that takes:
+
+1. A scientific claim
+2. A paper DOI / paper identifier
+
+and retrieves the most relevant evidence chunks from the paper produced by Milestone 3.
+
+The pipeline should become:
+
+Claim
+  ↓
+Citation Resolver              [DONE]
+  ↓
+Paper Retrieval                [DONE]
+  ↓
+Sections + Evidence Chunks     [DONE]
+  ↓
+Evidence Retrieval & Ranking   [IMPLEMENT NOW]
+  ↓
+Multi-Agent Verification       [LATER]
+
+==================================================
+STEP 1 — INSPECT EXISTING CODE
+==================================================
+
+Before writing code, inspect:
+
+- backend/app/
+- backend/app/services/
+- backend/app/schemas/
+- backend/app/api/routes/
+- backend/app/tests/
+- existing paper retrieval implementation
+- evidence_chunker.py
+- citation resolver
+- configuration
+- existing API conventions
+- existing error handling
+- README documentation
+
+Understand the existing:
+
+- Paper model/schema
+- Evidence chunk structure
+- DOI normalization
+- Paper retrieval flow
+- API response patterns
+- Test conventions
+
+Do not duplicate existing functionality.
+
+==================================================
+STEP 2 — CLAIM PREPROCESSING
+==================================================
+
+Create a small reusable claim preprocessing utility/service.
+
+Input:
+
+"The method improves accuracy by 40% on real-world software development tasks."
+
+Output should contain normalized information useful for retrieval.
+
+At minimum:
+
+- original claim
+- normalized claim
+- meaningful tokens/terms
+
+Requirements:
+
+- preserve the original claim
+- lowercase only for matching purposes
+- remove unnecessary punctuation
+- normalize whitespace
+- do not alter scientific meaning
+- do not perform aggressive stemming that could damage scientific terms
+- keep implementation deterministic
 
 Example:
 
-DocumentSection
+original:
+"The method improves accuracy by 40%."
 
-- section_name
-- text
-- order
+normalized:
+"method improves accuracy 40%"
 
-Attempt to identify common scientific sections:
+==================================================
+STEP 3 — EVIDENCE RETRIEVAL
+==================================================
 
-- Abstract
-- Introduction
-- Background
-- Methods
-- Materials and Methods
+Create:
+
+backend/app/services/evidence_retriever.py
+
+The service should:
+
+1. Accept a claim.
+2. Accept paper chunks from Milestone 3.
+3. Compare the claim against every chunk.
+4. Calculate a deterministic relevance score.
+5. Rank chunks from most relevant to least relevant.
+6. Return the top relevant evidence.
+
+For the first implementation, use a lightweight deterministic ranking strategy.
+
+DO NOT introduce embeddings, OpenAI, Gemini, LangChain, vector databases, or external AI APIs yet.
+
+The scoring can consider:
+
+- token overlap
+- meaningful keyword overlap
+- phrase overlap
+- numeric/value overlap
+- section importance
+- exact phrase matches
+
+Use a transparent scoring approach so the result can be explained and tested.
+
+==================================================
+STEP 4 — NUMERIC CLAIM HANDLING
+==================================================
+
+Scientific claims often contain numbers.
+
+For example:
+
+Claim:
+"The method improves accuracy by 40%."
+
+Evidence:
+"The proposed method improves accuracy by 12%."
+
+The retrieval system should recognize that both discuss accuracy/improvement, while preserving the different numeric value.
+
+Expose useful metadata such as:
+
+- claim_numbers
+- evidence_numbers
+- numeric_overlap
+
+Do NOT make the final SUPPORTS/CONTRADICTS decision here.
+
+That decision belongs to the future Adjudicator agent.
+
+==================================================
+STEP 5 — SECTION AWARENESS
+==================================================
+
+Use the existing chunk section information.
+
+Give reasonable ranking preference to sections such as:
+
 - Results
+- Findings
+- Experiments
+- Methods
+- Abstract
 - Discussion
 - Conclusion
-- Limitations
-- References
 
-Do not assume every paper contains every section.
+Do NOT blindly assume that Results is always correct.
 
-Unknown sections should still be preserved.
+Section weighting should only influence relevance ranking.
 
-Do not discard useful text merely because a heading is unfamiliar.
+Preserve:
 
---------------------------------------------------
-## PHASE 3.6 — TEXT CLEANING
---------------------------------------------------
-
-Create a utility/service for document cleaning.
-
-Responsibilities:
-
-- remove excessive whitespace
-- normalize line breaks
-- remove obvious repeated headers/footers when possible
-- preserve paragraph boundaries
-- preserve section structure
-- avoid destructive cleaning
-- preserve scientific terminology
-- preserve numbers, units, percentages and citations
-
-Do NOT aggressively summarize or rewrite the scientific text.
-
-The output must remain faithful to the source.
-
---------------------------------------------------
-## PHASE 3.7 — EVIDENCE CHUNKING
---------------------------------------------------
-
-Create:
-
-backend/app/services/evidence_chunker.py
-
-Split parsed document content into evidence-ready chunks.
-
-Each chunk should retain:
-
-- chunk_id
-- paper_id
 - section
+- chunk_id
 - chunk_index
-- text
 - source_url
-- page number if available
-- metadata where available
+- page if available
+- existing metadata
 
-Important:
+==================================================
+STEP 6 — EVIDENCE SCORE
+==================================================
 
-Chunks must not lose their relationship to the original paper.
+Each retrieved evidence item should expose a normalized relevance score.
 
-Prefer section-aware chunking over blindly splitting the entire paper.
+Example:
 
-Use reasonable configurable chunk size and overlap.
+{
+  "chunk_id": "chunk-12",
+  "section": "Results",
+  "text": "...",
+  "relevance_score": 0.92,
+  "claim_overlap": 0.75,
+  "numeric_overlap": 1.0,
+  "source_url": "...",
+  "page": 4
+}
 
-Do not hard-code values throughout the codebase.
+The exact scoring formula is up to you, but it must be:
 
-Put configurable defaults in one place.
+- deterministic
+- bounded between 0 and 1
+- documented
+- unit tested
 
-Example conceptual structure:
+Avoid pretending that this score is an AI confidence score.
 
-Paper
- ├── Abstract
- ├── Introduction
- ├── Methods
- ├── Results
- │    ├── Chunk 1
- │    ├── Chunk 2
- │    └── Chunk 3
- ├── Discussion
- └── Conclusion
+Call it something like:
 
---------------------------------------------------
-## PHASE 3.8 — API ENDPOINT
---------------------------------------------------
+relevance_score
+
+not:
+
+confidence
+
+==================================================
+STEP 7 — API
+==================================================
 
 Create:
 
-backend/app/api/routes/papers.py
+backend/app/api/routes/evidence.py
 
 Add:
 
-POST /api/papers/retrieve
+POST /api/evidence/retrieve
 
 Request:
 
 {
+  "claim": "The method improves accuracy by 40%.",
   "doi": "10.xxxx/xxxxx"
 }
 
 The endpoint should:
 
-1. Validate/normalize DOI.
-2. Resolve citation metadata.
-3. Discover accessible full text.
-4. Retrieve the document when available.
-5. Parse the document.
-6. Clean the text.
-7. Generate evidence chunks.
-8. Return normalized paper information.
+1. Validate the claim.
+2. Resolve/retrieve the paper using the existing services.
+3. Obtain the paper's evidence chunks.
+4. Rank the chunks against the claim.
+5. Return the highest-ranked evidence.
 
-The endpoint response should clearly distinguish:
+Do not duplicate DOI resolution logic.
 
-- metadata successfully retrieved
-- full text available
-- full text unavailable
-- document parsing failure
-- paper not found
-- provider failure
+Reuse existing services.
 
-Do not expose internal stack traces.
+==================================================
+STEP 8 — RESPONSE SCHEMA
+==================================================
 
-Use appropriate HTTP status codes.
+Create appropriate schemas under:
+
+backend/app/schemas/
 
 For example:
 
-400 → invalid request/DOI
-404 → paper not found
-422 → validation failure
-503 → external provider unavailable
+EvidenceRetrievalRequest
+EvidenceItem
+EvidenceRetrievalResponse
 
-But choose status codes according to the existing API conventions.
-
---------------------------------------------------
-## PHASE 3.9 — RESPONSE DESIGN
---------------------------------------------------
-
-The response should contain enough information for Milestone 4.
-
-Conceptually:
+Response structure should be similar to:
 
 {
   "status": "success",
+  "claim": "The method improves accuracy by 40%.",
   "paper": {
+    "paper_id": "...",
     "doi": "...",
-    "title": "...",
-    "authors": [],
-    "abstract": "...",
-    "journal": "...",
-    "publication_date": "...",
-    "open_access": true,
-    "full_text_available": true,
-    "full_text_format": "pdf"
+    "title": "..."
   },
-  "sections": [],
-  "chunks": [],
-  "source": {
-    "url": "...",
-    "provider": "openalex"
-  }
+  "evidence": [
+    {
+      "chunk_id": "chunk-12",
+      "section": "Results",
+      "chunk_index": 3,
+      "text": "...",
+      "relevance_score": 0.92,
+      "claim_overlap": 0.75,
+      "numeric_overlap": 1.0,
+      "source_url": "...",
+      "page": 4
+    }
+  ],
+  "total_chunks_considered": 25
 }
 
-Do not expose unnecessary raw provider responses.
+Keep the response compatible with the existing architecture and future agent pipeline.
 
-Keep the API contract clean and stable.
+==================================================
+STEP 9 — EDGE CASES
+==================================================
 
---------------------------------------------------
-## PHASE 3.10 — TESTING
---------------------------------------------------
+Handle these properly:
+
+1. Empty claim
+2. Claim that is too long
+3. Invalid DOI
+4. DOI not found
+5. Paper metadata available but full text unavailable
+6. Paper has no chunks
+7. No relevant evidence
+8. Duplicate chunks
+9. Missing section
+10. Missing page
+11. Missing source URL
+12. Numeric claim with no numeric evidence
+13. Evidence with numbers that differ from claim
+
+Use appropriate HTTP status codes consistent with Milestones 1–3.
+
+Do not return HTTP 500 for expected user/input/document conditions.
+
+==================================================
+STEP 10 — TESTS
+==================================================
 
 Create comprehensive automated tests.
 
-Suggested test files:
+At minimum test:
 
-backend/app/tests/test_paper_retriever.py
-backend/app/tests/test_document_retriever.py
-backend/app/tests/test_document_parser.py
-backend/app/tests/test_evidence_chunker.py
-backend/app/tests/test_papers_api.py
+### Claim preprocessing
+- normalization
+- whitespace
+- punctuation
+- empty claim
+- numeric extraction
 
-Tests should cover:
-
-### Metadata
-
-- valid DOI
-- metadata returned
-- missing optional metadata
-- paper not found
-
-### Full-text discovery
-
-- public PDF available
-- public HTML available
-- no full text available
-- provider failure
-- malformed provider response
-
-### Document retrieval
-
-- successful PDF download
-- successful HTML download
-- HTTP error
-- timeout
-- unsupported content type
-- oversized response
-
-### Parsing
-
-- simple PDF
-- simple HTML
-- malformed HTML
-- missing sections
-- unknown sections
-- multiple sections
-
-### Cleaning
-
-- excessive whitespace
-- repeated line breaks
-- preserved paragraphs
-- scientific numbers/units preserved
-
-### Chunking
-
-- chunks generated
-- section metadata preserved
-- chunk ordering preserved
-- overlap behavior
-- short sections
-- empty sections
-- chunk IDs unique
+### Ranking
+- exact phrase match ranks highly
+- keyword overlap
+- irrelevant chunk ranks low
+- numeric overlap
+- different numeric values remain distinguishable
+- section weighting
+- deterministic ordering
+- score is between 0 and 1
 
 ### API
-
 - successful retrieval
-- metadata-only response
-- unavailable full text
 - invalid DOI
-- paper not found
-- provider failure
+- missing paper
+- no full text
+- no chunks
+- empty claim
+- successful response schema
 
-All external HTTP calls must be mocked in tests.
+Mock external HTTP calls.
 
-Tests must NOT depend on live Crossref/OpenAlex/PDF servers.
+Do NOT depend on Crossref/OpenAlex/Nature being available during tests.
 
---------------------------------------------------
-## PHASE 3.11 — CONFIGURATION
---------------------------------------------------
+Preserve all existing tests.
 
-Update:
+==================================================
+STEP 11 — PERFORMANCE
+==================================================
 
-backend/.env.example
+Keep the first implementation simple.
 
-Only if required.
+Expected scale:
 
-Potential configuration:
+- tens to hundreds of chunks per paper
 
-CROSSREF_BASE_URL
-OPENALEX_BASE_URL
-CITATION_USER_AGENT
+Do not prematurely introduce:
 
-PAPER_REQUEST_TIMEOUT
-MAX_DOCUMENT_SIZE
-CHUNK_SIZE
-CHUNK_OVERLAP
+- vector databases
+- embeddings
+- Redis
+- Elasticsearch
+- LLM calls
 
-Use sensible defaults.
+A deterministic ranking implementation is sufficient for this milestone.
 
-Never put real API keys or secrets into .env.example.
+Structure the service so an embedding-based retriever can be added later without rewriting the API.
 
---------------------------------------------------
-## PHASE 3.12 — DOCUMENTATION
---------------------------------------------------
+==================================================
+STEP 12 — ROUTER REGISTRATION
+==================================================
+
+Register the new evidence router in:
+
+backend/app/main.py
+
+Follow the same pattern used by:
+
+- citations router
+- papers router
+
+==================================================
+STEP 13 — DOCUMENTATION
+==================================================
 
 Update:
 
@@ -570,79 +407,23 @@ backend/README.md
 
 Document:
 
-1. Paper retrieval endpoint
-2. Request example
-3. Response example
-4. Supported document formats
-5. Full-text unavailable behavior
-6. Chunking behavior
-7. Running tests
-8. Local development
+- Milestone 4
+- evidence retrieval flow
+- scoring approach
+- API endpoint
+- request example
+- response example
+- limitations
 
-Include a curl example.
+Clearly state:
 
---------------------------------------------------
-## ARCHITECTURE REQUIREMENTS
---------------------------------------------------
+"This milestone performs deterministic evidence retrieval and ranking. It does not produce the final scientific verdict."
 
-Keep responsibilities separated:
+==================================================
+STEP 14 — VALIDATION
+==================================================
 
-backend/app/
-├── api/
-│   └── routes/
-│       ├── citations.py
-│       └── papers.py
-│
-├── schemas/
-│   ├── citation.py
-│   └── paper.py
-│
-├── services/
-│   ├── citation_resolver.py
-│   ├── paper_retriever.py
-│   ├── document_retriever.py
-│   ├── document_parser.py
-│   └── evidence_chunker.py
-│
-├── utils/
-│   └── doi.py
-│
-└── tests/
-    ├── test_citation_resolver.py
-    ├── test_paper_retriever.py
-    ├── test_document_retriever.py
-    ├── test_document_parser.py
-    ├── test_evidence_chunker.py
-    └── test_papers_api.py
-
-Adapt this structure if the existing repository already has a better established pattern.
-
---------------------------------------------------
-## IMPORTANT: DO NOT BUILD THESE YET
---------------------------------------------------
-
-Do NOT implement:
-
-- Claim Challenger
-- Evidence Defender
-- Final Reviewer
-- LLM calls
-- RAG/vector database
-- embeddings
-- Supabase verification persistence
-- frontend/backend verification integration
-- dashboard changes
-- authentication changes
-
-Those belong to later milestones.
-
-This milestone only creates the reliable paper → evidence foundation.
-
---------------------------------------------------
-## VALIDATION REQUIREMENTS
---------------------------------------------------
-
-Before declaring the milestone complete, run:
+After implementation run:
 
 Backend:
 
@@ -650,53 +431,86 @@ python -m pytest
 
 Frontend:
 
+cd frontend
 npm run lint
 npm run build
 
-Backend health:
+Also manually test:
 
-GET /api/health
+POST /api/evidence/retrieve
 
-Citation resolver:
+using a known DOI and claim.
 
-POST /api/citations/resolve
+Verify:
 
-Paper retrieval:
+- API starts correctly
+- existing health endpoint works
+- citation resolver still works
+- paper retrieval still works
+- evidence retrieval returns ranked chunks
+- existing tests remain green
+- no frontend functionality is broken
 
-POST /api/papers/retrieve
+==================================================
+IMPORTANT ARCHITECTURE RULE
+==================================================
 
-Use a known public scientific DOI for integration testing if internet access is available.
+DO NOT implement the three verification agents in this milestone.
 
-If live integration tests are used, keep them separate from the normal automated test suite so CI does not depend on external services.
+The future architecture is:
 
---------------------------------------------------
-## FINAL REPORT
---------------------------------------------------
+Evidence Retrieval
+        ↓
+┌─────────────────────────┐
+│ Prosecutor              │
+│ Challenges the claim    │
+└─────────────────────────┘
+        ↓
+┌─────────────────────────┐
+│ Defender                │
+│ Builds supporting case  │
+└─────────────────────────┘
+        ↓
+┌─────────────────────────┐
+│ Adjudicator             │
+│ Final evidence verdict  │
+└─────────────────────────┘
 
-When implementation is complete, do NOT commit or push.
+Milestone 4 only produces:
 
-Report:
+"Here are the most relevant pieces of evidence for this claim."
+
+It must NOT produce:
+
+SUPPORTS
+OVERSTATED
+CONTRADICTS
+INSUFFICIENT
+FABRICATED
+
+Those verdicts belong to the later multi-agent verification layer.
+
+==================================================
+FINAL DELIVERABLE
+==================================================
+
+At the end, provide a concise implementation report containing:
 
 1. Files created
 2. Files modified
-3. API endpoints added
-4. Dependencies added
-5. Paper retrieval flow
-6. Supported document formats
-7. Full-text fallback behavior
-8. Chunking strategy
-9. Test count and results
-10. npm lint result
-11. npm build result
-12. Health endpoint result
-13. Citation resolver result
-14. Paper retrieval integration result
-15. Any limitations
-16. Recommended next milestone
+3. API endpoint added
+4. Ranking methodology
+5. Response structure
+6. Edge cases handled
+7. Number of tests
+8. Test results
+9. Frontend lint result
+10. Frontend build result
+11. Manual API test result
+12. Known limitations
+13. Confirmation that NO frontend functionality was changed
+14. Confirmation that NO LLM/vector database was introduced
 
-Do not claim success unless the validation commands actually pass.
+DO NOT commit or push anything.
 
-Most importantly:
-
-IMPLEMENT THIS MILESTONE ONLY.
-Do not proceed to Milestone 4 or implement the multi-agent verification system.
+Stop after Milestone 4 is fully implemented and validated.
