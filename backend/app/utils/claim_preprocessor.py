@@ -54,6 +54,7 @@ STOPWORDS = frozenset(
         "they",
         "he",
         "she",
+        "can",
     }
 )
 
