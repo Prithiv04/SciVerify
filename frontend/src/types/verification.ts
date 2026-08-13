@@ -59,6 +59,26 @@ export interface SuggestedCorrection {
   suggestedWording: string
 }
 
+export type ClaimSegmentStatus =
+  | 'SUPPORTED'
+  | 'PARTIALLY_SUPPORTED'
+  | 'UNSUPPORTED'
+  | 'CONTRADICTED'
+
+export interface ClaimSegment {
+  id: string
+  text: string
+  status: ClaimSegmentStatus
+  coverageScore: number
+  evidenceIds: string[]
+}
+
+export interface ClaimTraceability {
+  segments: ClaimSegment[]
+  overallCoverage: number
+  warnings?: string[]
+}
+
 export interface VerificationResult {
   id: string
   claim: string
@@ -83,6 +103,7 @@ export interface VerificationResult {
   adjudicatorDetail?: AdjudicatorDetail
   evidence: EvidenceItem[]
   suggestedCorrection?: SuggestedCorrection | null
+  claimTraceability?: ClaimTraceability
   createdAt: string
 }
 

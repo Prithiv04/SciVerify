@@ -1,8 +1,17 @@
 import type { VerdictKey } from '@/constants/verdicts'
 import type {
+  BackendAgentAnalysis,
+  BackendAdjudicatorAnalysis,
+  BackendClaimTraceability,
+  BackendEvidenceItem,
+  BackendPaperSummary,
+  BackendVerificationResponse,
+} from '@/types/backend-verification'
+import type {
   AgentAnalysis,
   AgentDetail,
   AdjudicatorDetail,
+  ClaimTraceability,
   EvidenceFactor,
   EvidenceItem,
   EvidenceStrength,
@@ -10,13 +19,6 @@ import type {
   VerificationFormInput,
   VerificationResult,
 } from '@/types/verification'
-import type {
-  BackendAgentAnalysis,
-  BackendAdjudicatorAnalysis,
-  BackendEvidenceItem,
-  BackendPaperSummary,
-  BackendVerificationResponse,
-} from '@/types/backend-verification'
 
 function emptyAgent(role: string): AgentAnalysis {
   return {
@@ -47,6 +49,30 @@ function toConfidencePercent(value: number | null | undefined): number {
   if (value == null || Number.isNaN(value)) return 0
   if (value <= 1) return Math.round(value * 100)
   return Math.round(value)
+}
+
+function toCoveragePercent(value: number | null | undefined): number {
+  if (value == null || Number.isNaN(value)) return 0
+  if (value <= 1) return Math.round(value * 100)
+  return Math.round(value)
+}
+
+function mapClaimTraceability(
+  traceability: BackendClaimTraceability | null | undefined,
+): ClaimTraceability | undefined {
+  if (!traceability?.segments?.length) return undefined
+
+  return {
+    segments: traceability.segments.map((segment) => ({
+      id: segment.id,
+      text: segment.text,
+      status: segment.status,
+      coverageScore: toCoveragePercent(segment.coverage_score),
+      evidenceIds: segment.evidence_ids ?? [],
+    })),
+    overallCoverage: toCoveragePercent(traceability.overall_coverage),
+    warnings: traceability.warnings?.filter(Boolean),
+  }
 }
 
 function mapAgent(
@@ -231,6 +257,7 @@ export function mapBackendVerificationToResult(
       mapEvidenceItem(item, response.paper, verdict),
     ),
     suggestedCorrection: mapSuggestedCorrection(response, response.claim),
+    claimTraceability: mapClaimTraceability(response.claim_traceability),
     createdAt: new Date().toISOString(),
   }
 }
@@ -270,6 +297,7 @@ export function mapInsufficientEvidenceResult(
       mapEvidenceItem(item, response.paper, 'INSUFFICIENT'),
     ),
     suggestedCorrection: null,
+    claimTraceability: mapClaimTraceability(response.claim_traceability),
     createdAt: new Date().toISOString(),
   }
 }

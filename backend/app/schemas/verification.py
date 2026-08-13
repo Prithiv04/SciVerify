@@ -81,6 +81,37 @@ class AdjudicatorAnalysis(BaseModel):
         return max(0.0, min(1.0, value))
 
 
+class ClaimSegmentStatus(str, Enum):
+    SUPPORTED = "SUPPORTED"
+    PARTIALLY_SUPPORTED = "PARTIALLY_SUPPORTED"
+    UNSUPPORTED = "UNSUPPORTED"
+    CONTRADICTED = "CONTRADICTED"
+
+
+class ClaimSegmentTrace(BaseModel):
+    id: str
+    text: str
+    status: ClaimSegmentStatus
+    coverage_score: float
+    evidence_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("coverage_score")
+    @classmethod
+    def clamp_coverage(cls, value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+
+class ClaimTraceability(BaseModel):
+    segments: list[ClaimSegmentTrace] = Field(default_factory=list)
+    overall_coverage: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+
+    @field_validator("overall_coverage")
+    @classmethod
+    def clamp_overall_coverage(cls, value: float) -> float:
+        return max(0.0, min(1.0, value))
+
+
 class VerificationResponse(BaseModel):
     status: VerificationStatus
     claim: str
@@ -96,4 +127,5 @@ class VerificationResponse(BaseModel):
     suggested_correction: str | None = None
     agent_agreement: bool | None = None
     validation_warnings: list[str] | None = None
+    claim_traceability: ClaimTraceability | None = None
     detail: str | None = None

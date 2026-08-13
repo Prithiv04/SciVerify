@@ -22,6 +22,7 @@ from app.services.paper_retriever import (
     PaperNotFoundError,
     PaperProviderError,
 )
+from app.services.claim_traceability import build_claim_traceability
 from app.services.verification_validator import validate_verification_result
 from app.utils.claim_preprocessor import InvalidClaimError, preprocess_claim
 from app.utils.doi import InvalidDOIError
@@ -66,6 +67,11 @@ def analyze_verification(
 
     if evidence_response.status in INSUFFICIENT_EVIDENCE_STATUSES or not evidence_response.evidence:
         logger.info("verification_completed status=insufficient_evidence")
+        traceability = build_claim_traceability(
+            processed_claim.original,
+            [],
+            verdict=Verdict.INSUFFICIENT,
+        )
         return VerificationResponse(
             status=VerificationStatus.INSUFFICIENT_EVIDENCE,
             claim=processed_claim.original,
@@ -76,6 +82,7 @@ def analyze_verification(
             or "Evidence retrieval did not produce usable chunks for agent analysis.",
             paper=paper,
             evidence=[],
+            claim_traceability=traceability,
             detail=evidence_response.detail,
         )
 
@@ -122,6 +129,14 @@ def analyze_verification(
         adjudicator=adjudicator,
     )
 
+    traceability = build_claim_traceability(
+        processed_claim.original,
+        evidence_response.evidence,
+        verdict=validated.verdict,
+        adjudicator=adjudicator,
+        prosecutor=prosecutor,
+    )
+
     logger.info(
         "verification_completed status=success original_verdict=%s validated_verdict=%s",
         adjudicator.verdict.value,
@@ -142,6 +157,7 @@ def analyze_verification(
         suggested_correction=validated.suggested_correction,
         agent_agreement=validated.agent_agreement,
         validation_warnings=validated.validation_warnings or None,
+        claim_traceability=traceability,
     )
 
 

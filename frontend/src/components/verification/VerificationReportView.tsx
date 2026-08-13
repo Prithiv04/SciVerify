@@ -1,16 +1,18 @@
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { AgentAnalysisPanel } from '@/components/verification/AgentAnalysisPanel'
+import { ClaimTraceabilityPanel } from '@/components/verification/ClaimTraceabilityPanel'
 import { SuggestedCorrectionPanel } from '@/components/verification/SuggestedCorrectionPanel'
 import { ValidationWarningsPanel } from '@/components/verification/ValidationWarningsPanel'
 import { VerdictHeader } from '@/components/verification/VerdictHeader'
 import { VerificationEvidenceCard } from '@/components/verification/VerificationEvidenceCard'
 import { getVerdictConfig } from '@/constants/verdicts'
+import { buildEvidenceSegmentLabelMap } from '@/lib/traceability-utils'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
 import { Divider } from '@/components/ui/Divider'
 import type { VerdictKey } from '@/constants/verdicts'
-import type { VerificationResult } from '@/types/verification'
+import type { ClaimSegment, EvidenceItem, VerificationResult } from '@/types/verification'
 
 export interface VerificationReportViewProps {
   result: VerificationResult
@@ -25,7 +27,7 @@ function ReportSection({
   children: ReactNode
 }) {
   return (
-    <section className="space-y-3" aria-labelledby={`section-${title.replace(/\s+/g, '-').toLowerCase()}`}>
+    <section className="space-y-3">
       <Divider label={title} />
       {children}
     </section>
@@ -62,10 +64,52 @@ export function VerificationReportView({
   result,
   onBack,
 }: VerificationReportViewProps) {
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null)
+  const [highlightedEvidenceIds, setHighlightedEvidenceIds] = useState<string[]>([])
+  const evidenceRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  const evidenceSegmentLabels = useMemo(
+    () => buildEvidenceSegmentLabelMap(result.claimTraceability?.segments ?? []),
+    [result.claimTraceability?.segments],
+  )
+
   const showCorrection =
     result.verdict === 'OVERSTATED' ||
     result.verdict === 'CONTRADICTS' ||
     result.verdict === 'FABRICATED'
+
+  useEffect(() => {
+    if (highlightedEvidenceIds.length === 0) return
+
+    const timeout = window.setTimeout(() => {
+      setHighlightedEvidenceIds([])
+    }, 2400)
+
+    return () => window.clearTimeout(timeout)
+  }, [highlightedEvidenceIds])
+
+  const handleSegmentSelect = (segment: ClaimSegment) => {
+    setSelectedSegmentId(segment.id)
+    setHighlightedEvidenceIds(segment.evidenceIds)
+
+    const firstId = segment.evidenceIds[0]
+    if (firstId) {
+      evidenceRefs.current[firstId]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }
+  }
+
+  const handleEvidenceSelect = (item: EvidenceItem) => {
+    const linkedSegment = result.claimTraceability?.segments.find((segment) =>
+      segment.evidenceIds.includes(item.id),
+    )
+    setHighlightedEvidenceIds([item.id])
+    if (linkedSegment) {
+      setSelectedSegmentId(linkedSegment.id)
+    }
+  }
 
   return (
     <article className="space-y-8">
@@ -105,21 +149,39 @@ export function VerificationReportView({
 
       <VerdictContextNote verdict={result.verdict} />
 
-      {result.validationWarnings && result.validationWarnings.length > 0 ? (
-        <ValidationWarningsPanel warnings={result.validationWarnings} />
-      ) : null}
-
-      {showCorrection && result.suggestedCorrection ? (
-        <ReportSection title="Suggested correction">
-          <SuggestedCorrectionPanel correction={result.suggestedCorrection} />
-        </ReportSection>
+      {result.claimTraceability ? (
+        <ClaimTraceabilityPanel
+          claim={result.claim}
+          traceability={result.claimTraceability}
+          selectedSegmentId={selectedSegmentId}
+          highlightedEvidenceIds={highlightedEvidenceIds}
+          onSegmentSelect={handleSegmentSelect}
+        />
       ) : null}
 
       <ReportSection title="Evidence">
         {result.evidence.length > 0 ? (
           <div className="grid gap-4">
             {result.evidence.slice(0, 5).map((item, index) => (
-              <VerificationEvidenceCard key={item.id} item={item} index={index} />
+              <VerificationEvidenceCard
+                key={item.id}
+                ref={(node) => {
+                  evidenceRefs.current[item.id] = node
+                }}
+                item={item}
+                index={index}
+                linkedSegmentLabels={evidenceSegmentLabels.get(item.id)}
+                highlighted={
+                  highlightedEvidenceIds.includes(item.id) ||
+                  Boolean(
+                    selectedSegmentId &&
+                      result.claimTraceability?.segments
+                        .find((segment) => segment.id === selectedSegmentId)
+                        ?.evidenceIds.includes(item.id),
+                  )
+                }
+                onSelect={handleEvidenceSelect}
+              />
             ))}
           </div>
         ) : (
@@ -145,6 +207,16 @@ export function VerificationReportView({
           adjudicatorDetail={result.adjudicatorDetail}
         />
       </ReportSection>
+
+      {result.validationWarnings && result.validationWarnings.length > 0 ? (
+        <ValidationWarningsPanel warnings={result.validationWarnings} />
+      ) : null}
+
+      {showCorrection && result.suggestedCorrection ? (
+        <ReportSection title="Suggested correction">
+          <SuggestedCorrectionPanel correction={result.suggestedCorrection} />
+        </ReportSection>
+      ) : null}
 
       {result.context ? (
         <ReportSection title="Additional context">

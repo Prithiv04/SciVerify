@@ -56,6 +56,26 @@ export interface BackendAdjudicatorAnalysis {
   suggested_correction?: string | null
 }
 
+export type BackendClaimSegmentStatus =
+  | 'SUPPORTED'
+  | 'PARTIALLY_SUPPORTED'
+  | 'UNSUPPORTED'
+  | 'CONTRADICTED'
+
+export interface BackendClaimSegment {
+  id: string
+  text: string
+  status: BackendClaimSegmentStatus
+  coverage_score: number
+  evidence_ids?: string[]
+}
+
+export interface BackendClaimTraceability {
+  segments: BackendClaimSegment[]
+  overall_coverage: number
+  warnings?: string[]
+}
+
 export interface BackendVerificationResponse {
   status: BackendVerificationStatus
   claim: string
@@ -71,6 +91,7 @@ export interface BackendVerificationResponse {
   suggested_correction?: string | null
   agent_agreement?: boolean | null
   validation_warnings?: string[] | null
+  claim_traceability?: BackendClaimTraceability | null
   detail?: string | null
 }
 
