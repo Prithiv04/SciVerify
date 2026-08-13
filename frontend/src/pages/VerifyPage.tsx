@@ -5,11 +5,13 @@ import { AppHeader } from '@/components/app/AppHeader'
 import { VerificationForm } from '@/components/verification/VerificationForm'
 import { VerificationLoading } from '@/components/verification/VerificationLoading'
 import { VerificationResultView } from '@/components/verification/VerificationResultView'
+import { useAuth } from '@/hooks/useAuth'
 import { verifyCitation } from '@/services/verificationService'
 import { useVerificationStore } from '@/stores/verificationStore'
 import { ROUTES, verificationReportPath } from '@/constants'
 import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
+import { Spinner } from '@/components/ui/Spinner'
 import type { VerificationFormSchema } from '@/lib/validations/verification'
 
 type SubmissionPhase = 'idle' | 'loading' | 'error'
@@ -18,8 +20,11 @@ export default function VerifyPage() {
   const { verificationId } = useParams<{ verificationId?: string }>()
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const getRecord = useVerificationStore((state) => state.getRecord)
   const addRecord = useVerificationStore((state) => state.addRecord)
+  const historyLoading = useVerificationStore((state) => state.loading)
+  const historyHydrated = useVerificationStore((state) => state.hydrated)
 
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -39,6 +44,7 @@ export default function VerifyPage() {
     if (submissionPhase === 'loading') return 'loading' as const
     if (submissionPhase === 'error' && !verificationId) return 'error' as const
     if (verificationId) {
+      if (!historyHydrated || historyLoading) return 'history-loading' as const
       return storedRecord ? ('result' as const) : ('error' as const)
     }
     return 'form' as const
@@ -47,6 +53,11 @@ export default function VerifyPage() {
   const result = storedRecord ?? null
 
   const handleSubmit = async (values: VerificationFormSchema) => {
+    if (!user?.id) {
+      toast.error('You must be signed in to save verification history.')
+      return
+    }
+
     setSubmissionPhase('loading')
     setErrorMessage(null)
 
@@ -58,10 +69,13 @@ export default function VerifyPage() {
         context: values.context,
       })
 
-      addRecord(verificationResult)
+      const { saved } = await addRecord(user.id, verificationResult)
       setSubmissionPhase('idle')
       navigate(verificationReportPath(verificationResult.id), { replace: true })
       toast.success('Verification completed.')
+      if (!saved) {
+        toast.warning('Could not save to history. The report is still available now.')
+      }
     } catch (error) {
       setSubmissionPhase('error')
       setErrorMessage(
@@ -110,11 +124,19 @@ export default function VerifyPage() {
             </Button>
           }
         />
-      ) : phase === 'loading' ? (
+      ) : phase === 'loading' || phase === 'history-loading' ? (
         <AppHeader
           eyebrow="Verifying"
-          title="Running verification pipeline"
-          description="SciVerify is analyzing the cited paper and running the multi-agent verification workflow."
+          title={
+            phase === 'history-loading'
+              ? 'Loading verification report'
+              : 'Running verification pipeline'
+          }
+          description={
+            phase === 'history-loading'
+              ? 'Retrieving the stored verification report from your history.'
+              : 'SciVerify is analyzing the cited paper and running the multi-agent verification workflow.'
+          }
         />
       ) : (
         <AppHeader
@@ -136,6 +158,13 @@ export default function VerifyPage() {
           message="Analyzing claim against cited paper..."
           indeterminate
         />
+      ) : null}
+
+      {phase === 'history-loading' ? (
+        <Panel padding="lg" className="flex flex-col items-center gap-3 text-center">
+          <Spinner size="lg" className="text-primary" />
+          <p className="text-sm text-text-secondary">Loading stored verification report...</p>
+        </Panel>
       ) : null}
 
       {phase === 'error' ? (

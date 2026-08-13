@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
+import { getVerdictConfig } from '@/constants/verdicts'
 import { VerdictBadge } from '@/components/sciverify/VerdictBadge'
+import { Button } from '@/components/ui/Button'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import { verificationReportPath } from '@/constants'
 import type { VerificationResult } from '@/types/verification'
@@ -9,6 +11,7 @@ import type { VerificationResult } from '@/types/verification'
 export interface VerificationActivityCardProps {
   record: VerificationResult
   className?: string
+  onDelete?: (record: VerificationResult) => void
 }
 
 function formatDate(value: string) {
@@ -17,41 +20,16 @@ function formatDate(value: string) {
   }).format(new Date(value))
 }
 
-function normalize(value: string) {
-  return value.trim().toLowerCase()
-}
-
-function getSourceLines(record: VerificationResult): string[] {
-  const primaryEvidence = record.evidence[0]
-
-  if (primaryEvidence) {
-    const lines: string[] = []
-
-    if (primaryEvidence.identifier?.trim()) {
-      lines.push(primaryEvidence.identifier.trim())
-    }
-
-    if (primaryEvidence.title?.trim()) {
-      const title = primaryEvidence.title.trim()
-      const isDuplicate = lines.some((line) => normalize(line) === normalize(title))
-      if (!isDuplicate) {
-        lines.push(title)
-      }
-    }
-
-    if (lines.length > 0) {
-      return lines
-    }
-  }
-
-  return [record.citation.trim()]
-}
-
 export function VerificationActivityCard({
   record,
   className,
+  onDelete,
 }: VerificationActivityCardProps) {
-  const sourceLines = getSourceLines(record)
+  const verdictLabel = getVerdictConfig(record.verdict).label
+  const paperLine =
+    record.paperTitle?.trim() ||
+    record.paperDoi?.trim() ||
+    record.citation.trim()
 
   return (
     <Card
@@ -63,15 +41,24 @@ export function VerificationActivityCard({
     >
       <CardHeader className="space-y-4 p-5 pb-0">
         <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-          <VerdictBadge verdict={record.verdict} size="sm" />
-          <div className="text-right">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-              Confidence
-            </p>
-            <p className="text-lg font-semibold tabular-nums leading-none text-text-primary">
-              {record.confidence}%
-            </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <VerdictBadge verdict={record.verdict} size="sm" />
+            <span className="text-sm font-semibold tabular-nums text-text-primary">
+              {verdictLabel} · {record.confidence}%
+            </span>
           </div>
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-text-muted hover:text-danger"
+              aria-label={`Delete verification for ${record.claim}`}
+              onClick={() => onDelete(record)}
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+            </Button>
+          ) : null}
         </div>
 
         <div className="space-y-3">
@@ -79,17 +66,14 @@ export function VerificationActivityCard({
             {record.claim}
           </p>
           <div className="space-y-1 border-l-2 border-border/80 pl-3">
-            {sourceLines.map((line) => (
-              <p
-                key={`${record.id}-${line}`}
-                className={cn(
-                  'break-words text-xs leading-relaxed text-text-secondary',
-                  record.evidence[0]?.identifier?.trim() === line && 'font-mono',
-                )}
-              >
-                {line}
+            <p className="break-words text-xs leading-relaxed text-text-secondary">
+              {paperLine}
+            </p>
+            {record.paperDoi && record.paperTitle ? (
+              <p className="break-all font-mono text-xs text-text-muted">
+                {record.paperDoi}
               </p>
-            ))}
+            ) : null}
           </div>
         </div>
       </CardHeader>

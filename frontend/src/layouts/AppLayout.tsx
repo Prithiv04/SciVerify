@@ -6,12 +6,14 @@ import {
   AppMobileNav,
   AppSidebar,
 } from '@/components/app/AppSidebar'
+import { HistoryHydrator } from '@/components/verification/HistoryHydrator'
 
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <div className="min-h-screen bg-background text-text-primary">
+      <HistoryHydrator />
       <div className="flex min-h-screen">
         <aside className="hidden w-64 shrink-0 border-r border-border bg-surface/95 lg:block">
           <AppSidebar />

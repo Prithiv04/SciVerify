@@ -1,433 +1,293 @@
-# Implementation Plan: SciVerify Verification Result Transparency UI
+# Implementation Plan: Verification History & Persistence
 
 ## Objective
 
-Update the SciVerify frontend to clearly present the complete verification result returned by the backend.
+Implement a reliable verification history system for SciVerify.
 
-The backend now returns:
+Users should be able to:
 
-- verdict
-- confidence
-- summary
-- reasoning
-- evidence
-- prosecutor
-- defender
-- adjudicator
-- suggested_correction
-- agent_agreement
-- validation_warnings
+1. Run a verification
+2. Save the result
+3. See previous verifications
+4. Search/filter history
+5. Open a previous verification
+6. View the complete original verification report
 
-The frontend must expose these results clearly without changing backend behavior.
+Do not modify the verification intelligence pipeline.
 
 ---
 
-## Step 1 — Inspect existing frontend
+## Step 1 — Inspect existing history implementation
 
 Inspect:
 
-- frontend/src/
-- verification pages
-- verification result components
-- evidence components
-- API/client services
-- Zustand stores
-- existing UI components
-- routing
-- loading/error states
+- frontend/src/pages/HistoryPage
+- frontend/src/services
+- frontend/src/store
+- existing Supabase/database integration
+- backend schemas/models related to history
+- existing history API endpoints, if any
 
-Understand the current verification flow:
+Determine whether history is currently:
 
-Verification Form
-→ API request
-→ Loading
-→ Verification Result
+- mocked
+- local-only
+- persisted in Supabase
+- partially implemented
 
-Do not rewrite working components unnecessarily.
+Do not create duplicate persistence mechanisms.
 
 ---
 
-## Step 2 — Update API types
+## Step 2 — Define verification history record
 
-Update the frontend TypeScript types/interfaces to match the current backend response.
+A history record should contain at minimum:
 
-Include:
-
-- status
+- id
 - claim
+- DOI
+- paper title
 - verdict
 - confidence
 - summary
-- reasoning
-- paper
+- created_at
+
+Where practical, preserve the complete verification result so that reopening history does not require another Groq call.
+
+Optional:
+
 - evidence
-- prosecutor
-- defender
-- adjudicator
-- suggested_correction
-- agent_agreement
-- validation_warnings
-
-Make new fields optional for backward compatibility.
-
-Do not use `any` unless absolutely necessary.
-
----
-
-## Step 3 — Improve the main verdict section
-
-Create a clear verdict header.
-
-Example:
-
-VERIFICATION RESULT
-
-OVERSTATED
-
-Confidence: 85%
-
-Then display:
-
-- claim
-- paper title
-- DOI
-- confidence
-- agent agreement
-
-Use the existing SciVerify design system.
-
-Do not introduce a completely different visual style.
-
----
-
-## Step 4 — Add verdict-specific UI
-
-Support:
-
-SUPPORTS
-- Positive/support indication
-
-OVERSTATED
-- Warning indication
-- Show suggested correction
-
-CONTRADICTS
-- Contradiction indication
-
-INSUFFICIENT
-- Insufficient evidence indication
-- Clearly explain that the paper evidence was insufficient
-
-FABRICATED
-- Strong warning indication
-
-Do not hard-code scientific conclusions.
-
-Only style based on the verdict value.
-
----
-
-## Step 5 — Evidence section
-
-Display the top 5 evidence items returned by the backend.
-
-For every evidence item show:
-
-- section
-- relevance score
-- claim overlap
-- numeric overlap if available
-- evidence text
-- source URL
-- chunk ID if useful
-
-Example:
-
-Evidence #1
-
-Section:
-Results
-
-Relevance:
-91%
-
-Claim overlap:
-87%
-
-Evidence:
-"...."
-
-Keep the original evidence text unchanged.
-
-Do not perform additional evidence processing in the frontend.
-
----
-
-## Step 6 — Evidence quality visualization
-
-Add a simple visual representation of:
-
-- relevance score
-- claim overlap
-
-For example:
-
-Relevance
-█████████░ 91%
-
-Claim overlap
-████████░░ 87%
-
-Keep the visualization lightweight.
-
-Do not add unnecessary charts.
-
----
-
-## Step 7 — Agent analysis section
-
-Create an expandable agent analysis section.
-
-Show:
-
-### Prosecutor
-
-- stance
-- confidence
-- analysis
-- key points
-- supporting evidence
-- contradicting evidence
-
-### Defender
-
-- stance
-- confidence
-- analysis
-- key points
-- supporting evidence
-- contradicting evidence
-
-### Adjudicator
-
-- verdict
-- confidence
-- reasoning
-- supporting evidence
-- contradicting evidence
+- agent results
+- validation warnings
 - suggested correction
 
-The Adjudicator section should be visually distinguished as the final reasoning stage.
+---
+
+## Step 3 — Persistence strategy
+
+Use the project's existing database/Supabase setup.
+
+Do NOT introduce another database.
+
+Do NOT store API keys or secrets.
+
+Create the minimum required schema/table if persistence does not already exist.
+
+Suggested table:
+
+verification_history
+
+Fields:
+
+- id
+- claim
+- doi
+- paper_title
+- verdict
+- confidence
+- result_json
+- created_at
+
+Use JSON for the complete verification response if that matches the existing architecture.
 
 ---
 
-## Step 8 — Agent agreement
+## Step 4 — Save successful verification
 
-Use:
+After a successful verification:
 
-agent_agreement
+Frontend/backend should persist the result.
+
+Important:
+
+Do not make persistence failure cause an otherwise successful verification to fail.
+
+Example:
+
+Verification succeeds
+→ attempt save
+→ if save fails:
+   show verification normally
+   optionally show "Could not save to history"
+
+---
+
+## Step 5 — History page
+
+Replace placeholder/mock history with persisted records.
 
 Display:
 
-Agents agree
-
-or
-
-Agents disagree
-
-If null:
-
-Agreement information unavailable
-
-Do not infer agreement in the frontend.
-
-Use the backend value directly.
-
----
-
-## Step 9 — Validation warnings
-
-If:
-
-validation_warnings.length > 0
-
-display a "Validation Notes" section.
+- claim
+- paper
+- verdict
+- confidence
+- date
 
 Example:
 
-Validation Notes
+OVERSTATED · 85%
 
-⚠ Confidence reduced because evidence strength was weak.
+Cas9 can be programmed with guide RNA...
 
-⚠ Agent disagreement detected.
+A Programmable Dual-RNA–Guided DNA Endonuclease...
 
-If there are no warnings:
-
-Do not show an empty warning box.
+Aug 13, 2026
 
 ---
 
-## Step 10 — Suggested correction
+## Step 6 — Search
 
-Display suggested correction only when it exists.
+Allow searching by:
 
-For example:
+- claim
+- DOI
+- paper title
 
-Suggested Correction
+Search should be case-insensitive.
 
-"Cas9 can be programmed with guide RNA to cleave specific double-stranded DNA target sequences, provided that the target sequence is adjacent to a PAM sequence."
-
-For SUPPORTS/INSUFFICIENT, respect the backend's null value.
-
-Do not generate corrections in the frontend.
+Do not implement complicated full-text search unless already supported.
 
 ---
 
-## Step 11 — Error states
+## Step 7 — Filtering
 
-Handle backend responses gracefully.
+Add verdict filters:
 
-Support:
+- All
+- SUPPORTS
+- OVERSTATED
+- CONTRADICTS
+- INSUFFICIENT
+- FABRICATED
 
-- network failure
-- HTTP 422
-- HTTP 429
-- retrieval failure
-- FULL_TEXT_UNAVAILABLE
-- insufficient evidence
-- generic server error
+Add optional date sorting:
 
-Never show raw stack traces to the user.
-
-Provide a useful message.
-
-For example:
-
-"Full text could not be retrieved from the available sources. Please try another paper."
-
-For rate limiting:
-
-"The AI verification service is temporarily rate limited. Please try again later."
-
-Do not expose API keys or internal configuration.
+- Newest
+- Oldest
 
 ---
 
-## Step 12 — Loading state
+## Step 8 — Open previous verification
 
-Improve the existing verification loading experience.
+Clicking a history item should open the complete verification report.
 
-Show the pipeline stages:
+Important:
 
-1. Finding paper
-2. Retrieving full text
-3. Extracting evidence
-4. Prosecutor analysis
-5. Defender analysis
-6. Adjudication
-7. Validating result
+Do NOT call Groq again.
 
-These are UI stages only.
+Load the stored result.
 
-Do not change backend execution.
+The report should use the same VerificationReportView used by live verification.
+
+Avoid duplicating the report UI.
 
 ---
 
-## Step 13 — Responsive design
+## Step 9 — Delete history
 
-Ensure the result page works on:
+Allow deleting an individual history record.
 
-- desktop
-- laptop
-- tablet
-- mobile
+Add confirmation before deletion.
 
-Avoid horizontal overflow.
-
-Evidence cards and agent panels should collapse appropriately.
+Do not add bulk delete unless already required.
 
 ---
 
-## Step 14 — Accessibility
+## Step 10 — Empty state
 
-Ensure:
+If there is no history:
 
-- sufficient text contrast
-- keyboard-accessible expandable sections
-- meaningful button labels
-- semantic headings
-- accessible status/error messages
+Show a useful empty state:
 
-Do not rely solely on colors to communicate verdicts.
+"No verification history yet."
+
+"Verify a scientific claim to see your results here."
+
+Provide a CTA to the verification page.
 
 ---
 
-## Step 15 — Tests
+## Step 11 — Loading/error states
 
-Run existing frontend tests.
+Handle:
 
-If the project has no frontend test setup, do not introduce a large testing framework unnecessarily.
+- loading history
+- database/network failure
+- delete failure
+- malformed history record
+
+Never show raw backend/database errors.
+
+---
+
+## Step 12 — Privacy
+
+Do not log or expose:
+
+- API keys
+- internal prompts
+- provider credentials
+
+Treat stored verification results as user data.
+
+---
+
+## Step 13 — Tests
+
+Add tests only using the existing testing infrastructure.
 
 At minimum verify:
 
-- successful result rendering
-- each verdict renders correctly
-- evidence renders
-- agent agreement renders
-- validation warnings render
-- suggested correction renders
-- null optional fields do not crash the UI
-- API errors render correctly
-- loading state renders correctly
+- successful result saved
+- history loads
+- search works
+- verdict filtering works
+- history item opens stored report
+- deletion works
+- empty state works
+- persistence failure does not break verification
+- malformed record is handled safely
+
+Do not call Groq in tests.
 
 ---
 
-## Step 16 — Backend compatibility
+## Step 14 — Regression
 
-Do NOT modify:
+Backend:
 
-- evidence retrieval
-- document parser
-- evidence ranking
-- Prosecutor
-- Defender
-- Adjudicator
-- LLM provider
-- verification validator
+python -m pytest -q
 
-unless a genuine API compatibility issue is discovered.
+Expected baseline:
 
-The frontend should consume the existing backend response.
+176 passed
+
+Frontend:
+
+npm run lint
+npm run build
+
+All must pass.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] TypeScript types match backend response
-- [ ] Final verdict is clearly visible
-- [ ] Confidence is visible
-- [ ] Claim and paper information are visible
-- [ ] Top 5 evidence items are displayed
-- [ ] Evidence relevance/claim overlap are displayed
-- [ ] Prosecutor analysis is visible
-- [ ] Defender analysis is visible
-- [ ] Adjudicator analysis is visible
-- [ ] Agent agreement is displayed
-- [ ] Validation warnings are displayed when present
-- [ ] Suggested correction is displayed when present
-- [ ] All verdict types are supported
-- [ ] API errors are handled gracefully
-- [ ] Loading stages are clear
-- [ ] Responsive layout works
-- [ ] Existing frontend functionality remains intact
-
-After implementation, report:
-
-1. Files changed
-2. Components added/modified
-3. API types updated
-4. Tests performed
-5. Screenshots/manual verification performed
-6. Any remaining limitations
+- [ ] Verification results persist
+- [ ] History page uses real persisted data
+- [ ] Search works
+- [ ] Verdict filtering works
+- [ ] History can be opened
+- [ ] Opening history does not call Groq
+- [ ] History can be deleted
+- [ ] Empty state works
+- [ ] Persistence failure does not destroy successful verification
+- [ ] Existing verification report UI is reused
+- [ ] No verification intelligence logic changed
+- [ ] No API keys/secrets stored
+- [ ] Backend tests remain 176+
+- [ ] Frontend lint passes
+- [ ] Frontend build passes
 
 Do not commit or push automatically.
