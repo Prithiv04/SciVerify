@@ -1,0 +1,255 @@
+{
+  "dataset_path": "C:\\Users\\shaki\\OneDrive\\Desktop\\SciVerify\\backend\\evaluation\\dataset.json",
+  "cases_evaluated": 12,
+  "skipped_case_ids": [],
+  "verdict_accuracy": 1.0,
+  "confusion_matrix": {
+    "SUPPORTS": {
+      "SUPPORTS": 4
+    },
+    "OVERSTATED": {
+      "OVERSTATED": 3
+    },
+    "CONTRADICTS": {
+      "CONTRADICTS": 2
+    },
+    "INSUFFICIENT": {
+      "INSUFFICIENT": 2
+    },
+    "FABRICATED": {
+      "FABRICATED": 1
+    }
+  },
+  "incorrect_case_ids": [],
+  "evidence": {
+    "average_count": 0.9166666666666666,
+    "average_relevance": 0.64,
+    "average_claim_overlap": 0.5941666666666666,
+    "average_duplicate_rate": 0.0
+  },
+  "traceability": {
+    "completeness": 0.9166666666666666,
+    "average_overall_coverage": 0.5440909090909091,
+    "supported_segment_rate": 0.3076923076923077,
+    "partial_segment_rate": 0.23076923076923078,
+    "unsupported_segment_rate": 0.3076923076923077,
+    "contradicted_segment_rate": 0.15384615384615385
+  },
+  "validation": {
+    "override_rate": 0.0,
+    "warning_rate": 0.08333333333333333
+  },
+  "agent_agreement": {
+    "agreement_rate": 0.8,
+    "true_count": 8,
+    "false_count": 2,
+    "missing_count": 2
+  },
+  "confidence": {
+    "average": 0.7050000000000001,
+    "correct_average": 0.7050000000000001,
+    "incorrect_average": null,
+    "minimum": 0.0,
+    "maximum": 0.88,
+    "average_error": 0.295,
+    "note": "Confidence error is a simple diagnostic, not formal calibration."
+  },
+  "regression": {
+    "passed": true,
+    "findings": []
+  },
+  "cases": [
+    {
+      "case_id": "cas9_supports_001",
+      "expected_verdict": "SUPPORTS",
+      "actual_verdict": "SUPPORTS",
+      "verdict_correct": true,
+      "evidence_count": 2,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.9,
+      "average_claim_overlap": 0.87,
+      "overall_coverage": 0.895,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.86,
+      "confidence_error": 0.14
+    },
+    {
+      "case_id": "accuracy_overstated_001",
+      "expected_verdict": "OVERSTATED",
+      "actual_verdict": "OVERSTATED",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.82,
+      "average_claim_overlap": 0.74,
+      "overall_coverage": 0.62,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": false,
+      "confidence": 0.78,
+      "confidence_error": 0.21999999999999997
+    },
+    {
+      "case_id": "mortality_contradicts_001",
+      "expected_verdict": "CONTRADICTS",
+      "actual_verdict": "CONTRADICTS",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.84,
+      "average_claim_overlap": 0.8,
+      "overall_coverage": 0.79,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": false,
+      "confidence": 0.81,
+      "confidence_error": 0.18999999999999995
+    },
+    {
+      "case_id": "insufficient_evidence_001",
+      "expected_verdict": "INSUFFICIENT",
+      "actual_verdict": "INSUFFICIENT",
+      "verdict_correct": true,
+      "evidence_count": 0,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.0,
+      "average_claim_overlap": 0.0,
+      "overall_coverage": 0.0,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": null,
+      "confidence": 0.0,
+      "confidence_error": 1.0
+    },
+    {
+      "case_id": "fabricated_claim_001",
+      "expected_verdict": "FABRICATED",
+      "actual_verdict": "FABRICATED",
+      "verdict_correct": true,
+      "evidence_count": 0,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.0,
+      "average_claim_overlap": 0.0,
+      "overall_coverage": 0.05,
+      "validation_warning_count": 1,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.72,
+      "confidence_error": 0.28
+    },
+    {
+      "case_id": "numeric_supports_001",
+      "expected_verdict": "SUPPORTS",
+      "actual_verdict": "SUPPORTS",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.9,
+      "average_claim_overlap": 0.88,
+      "overall_coverage": 0.9,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.88,
+      "confidence_error": 0.12
+    },
+    {
+      "case_id": "universal_overstated_001",
+      "expected_verdict": "OVERSTATED",
+      "actual_verdict": "OVERSTATED",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.7,
+      "average_claim_overlap": 0.55,
+      "overall_coverage": 0.35,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.76,
+      "confidence_error": 0.24
+    },
+    {
+      "case_id": "weak_insufficient_001",
+      "expected_verdict": "INSUFFICIENT",
+      "actual_verdict": "INSUFFICIENT",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.22,
+      "average_claim_overlap": 0.18,
+      "overall_coverage": 0.15,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.41,
+      "confidence_error": 0.5900000000000001
+    },
+    {
+      "case_id": "mechanism_supports_002",
+      "expected_verdict": "SUPPORTS",
+      "actual_verdict": "SUPPORTS",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.87,
+      "average_claim_overlap": 0.84,
+      "overall_coverage": 0.86,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.85,
+      "confidence_error": 0.15000000000000002
+    },
+    {
+      "case_id": "direction_contradicts_002",
+      "expected_verdict": "CONTRADICTS",
+      "actual_verdict": "CONTRADICTS",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.83,
+      "average_claim_overlap": 0.79,
+      "overall_coverage": 0.77,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.8,
+      "confidence_error": 0.19999999999999996
+    },
+    {
+      "case_id": "magnitude_overstated_002",
+      "expected_verdict": "OVERSTATED",
+      "actual_verdict": "OVERSTATED",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.8,
+      "average_claim_overlap": 0.7,
+      "overall_coverage": 0.6,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": true,
+      "confidence": 0.77,
+      "confidence_error": 0.22999999999999998
+    },
+    {
+      "case_id": "legacy_no_traceability_001",
+      "expected_verdict": "SUPPORTS",
+      "actual_verdict": "SUPPORTS",
+      "verdict_correct": true,
+      "evidence_count": 1,
+      "duplicate_rate": 0.0,
+      "average_relevance": 0.8,
+      "average_claim_overlap": 0.78,
+      "overall_coverage": null,
+      "validation_warning_count": 0,
+      "verdict_changed": false,
+      "agent_agreement": null,
+      "confidence": 0.82,
+      "confidence_error": 0.18000000000000005
+    }
+  ]
+}

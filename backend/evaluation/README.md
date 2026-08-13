@@ -1,0 +1,121 @@
+# SciVerify Evaluation & Regression Framework
+
+Developer-only benchmark tooling for measuring SciVerify quality over time. This package evaluates stored `VerificationResponse` fixtures against labeled benchmark cases. It does **not** modify the production verification pipeline.
+
+## Purpose
+
+Use this framework to detect regressions when changing:
+
+- evidence retrieval, parsing, deduplication, or ranking
+- verdict validation
+- claim traceability
+
+Offline evaluation is the default. No API keys or Groq calls are required for tests or normal CLI usage.
+
+## Dataset
+
+Benchmark cases live in `evaluation/dataset.json`. Each case includes:
+
+- `id` — unique case identifier
+- `claim` — user claim text
+- `doi` — normalized DOI for the cited paper
+- `expected_verdict` — one of `SUPPORTS`, `OVERSTATED`, `CONTRADICTS`, `INSUFFICIENT`, `FABRICATED`
+- `description` — human-readable case note
+- optional `expected_min_evidence_count`
+- optional `expected_traceability_statuses`
+
+The dataset is a developer benchmark only. Expected labels reflect benchmark intent, not universal scientific truth.
+
+## Offline fixtures
+
+Deterministic `VerificationResponse` JSON files live in `evaluation/fixtures/{case_id}.json`. These power offline evaluation and unit tests.
+
+Regenerate fixtures after changing `app/evaluation/fixture_factory.py`:
+
+```bash
+cd backend
+python -c "from app.evaluation.fixture_factory import write_all_fixtures; from app.evaluation.dataset_loader import default_fixtures_dir; write_all_fixtures(default_fixtures_dir())"
+```
+
+## Run offline evaluation
+
+```bash
+cd backend
+python -m app.evaluation.run
+```
+
+Optional flags:
+
+```bash
+python -m app.evaluation.run --dataset evaluation/dataset.json
+python -m app.evaluation.run --fixtures-dir evaluation/fixtures
+python -m app.evaluation.run --output-dir evaluation/results
+```
+
+Reports are written to:
+
+- `evaluation/results/latest.json`
+- `evaluation/results/latest.md`
+
+## Compare against baseline
+
+```bash
+cd backend
+python -m app.evaluation.run --compare-baseline
+```
+
+Baseline metrics are stored in `evaluation/baseline.json`. The CLI exits with code `1` when a regression is detected.
+
+Configurable tolerances (environment variables):
+
+- `VERDICT_ACCURACY_TOLERANCE` (default `0.02`)
+- `EVIDENCE_COVERAGE_TOLERANCE` (default `0.03`)
+- `DUPLICATE_RATE_TOLERANCE` (default `0.01`)
+- `TRACEABILITY_COMPLETENESS_TOLERANCE` (default `0.03`)
+- `AVERAGE_RELEVANCE_TOLERANCE` (default `0.03`)
+
+## Update baseline
+
+The baseline is **never** updated automatically. After reviewing current metrics:
+
+```bash
+cd backend
+python -m app.evaluation.run --update-baseline
+```
+
+Review the printed report before using this flag.
+
+## Metrics
+
+- **Verdict accuracy** — correct verdicts / evaluated cases, plus confusion matrix
+- **Evidence** — count, duplicate rate, average relevance, average claim overlap
+- **Traceability** — completeness, segment status rates, overall coverage
+- **Validation** — override rate, warning rate
+- **Agent agreement** — agreement rate when the field is present
+- **Confidence** — averages for correct/incorrect cases, min/max, simple confidence error diagnostic
+
+Confidence error is a simple diagnostic (`abs(confidence - correctness)`), not formal calibration.
+
+## Optional live evaluation
+
+Live mode runs the real verification pipeline and may call external APIs:
+
+```bash
+cd backend
+python -m app.evaluation.run --live
+```
+
+Use only when you explicitly want live pipeline results. Automated tests never use live mode.
+
+## Limitations
+
+- Benchmark quality depends on case labels and fixture fidelity.
+- Offline fixtures test the evaluator and regression tooling; they do not replace end-to-end live verification.
+- Small floating-point drift is tolerated via regression thresholds.
+
+## Tests
+
+```bash
+cd backend
+python -m pytest app/tests/test_evaluation_metrics.py app/tests/test_evaluation_dataset.py app/tests/test_evaluation_regression.py -q
+```

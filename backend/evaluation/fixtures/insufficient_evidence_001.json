@@ -1,0 +1,34 @@
+{
+  "status": "insufficient_evidence",
+  "claim": "The dataset proves universal efficacy.",
+  "verdict": "INSUFFICIENT",
+  "confidence": 0.0,
+  "summary": "Insufficient evidence.",
+  "reasoning": "Not enough evidence.",
+  "paper": {
+    "paper_id": "10.1000/benchmark",
+    "doi": "10.1000/benchmark",
+    "title": "Benchmark Paper"
+  },
+  "evidence": [],
+  "prosecutor": null,
+  "defender": null,
+  "adjudicator": null,
+  "suggested_correction": null,
+  "agent_agreement": null,
+  "validation_warnings": null,
+  "claim_traceability": {
+    "segments": [
+      {
+        "id": "segment_1",
+        "text": "The dataset proves universal efficacy.",
+        "status": "UNSUPPORTED",
+        "coverage_score": 0.0,
+        "evidence_ids": []
+      }
+    ],
+    "overall_coverage": 0.0,
+    "warnings": []
+  },
+  "detail": null
+}

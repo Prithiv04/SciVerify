@@ -1,0 +1,61 @@
+{
+  "status": "success",
+  "claim": "The trial demonstrated a 95% cure rate.",
+  "verdict": "FABRICATED",
+  "confidence": 0.72,
+  "summary": "Benchmark summary.",
+  "reasoning": "Benchmark reasoning.",
+  "paper": {
+    "paper_id": "10.1000/benchmark",
+    "doi": "10.1000/benchmark",
+    "title": "Benchmark Paper"
+  },
+  "evidence": [],
+  "prosecutor": {
+    "agent": "prosecutor",
+    "analysis": "Benchmark prosecutor analysis.",
+    "stance": "neutral",
+    "key_points": [],
+    "supporting_evidence": [],
+    "contradicting_evidence": [],
+    "confidence": 0.65
+  },
+  "defender": {
+    "agent": "defender",
+    "analysis": "Benchmark defender analysis.",
+    "stance": "supportive",
+    "key_points": [],
+    "supporting_evidence": [],
+    "contradicting_evidence": [],
+    "confidence": 0.7
+  },
+  "adjudicator": {
+    "agent": "adjudicator",
+    "analysis": "Benchmark adjudicator analysis.",
+    "verdict": "FABRICATED",
+    "confidence": 0.72,
+    "reasoning": "Benchmark reasoning.",
+    "supporting_evidence": [],
+    "contradicting_evidence": [],
+    "suggested_correction": null
+  },
+  "suggested_correction": null,
+  "agent_agreement": true,
+  "validation_warnings": [
+    "The claim lacks adequate supporting evidence in the cited paper."
+  ],
+  "claim_traceability": {
+    "segments": [
+      {
+        "id": "segment_1",
+        "text": "The trial demonstrated a 95% cure rate.",
+        "status": "UNSUPPORTED",
+        "coverage_score": 0.05,
+        "evidence_ids": []
+      }
+    ],
+    "overall_coverage": 0.05,
+    "warnings": []
+  },
+  "detail": null
+}
