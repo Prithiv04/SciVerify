@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -28,7 +30,21 @@ from app.services.document_retriever import (
 from app.services.evidence_chunker import chunk_sections
 from app.utils.doi import normalize_doi
 
+logger = logging.getLogger(__name__)
+
 DocumentFormat = Literal["pdf", "html"]
+
+_PMC_ARTICLE_PATTERN = re.compile(
+    r"(?:pmc\.ncbi\.nlm\.nih\.gov|ncbi\.nlm\.nih\.gov/pmc|europepmc\.org/pmc)/articles/(?:PMC)?(\d+)",
+    re.IGNORECASE,
+)
+_KNOWN_OA_REPOSITORY_HOSTS = (
+    "europepmc.org",
+    "escholarship.org",
+    "pubmedcentral.nih.gov",
+    "ncbi.nlm.nih.gov/pmc",
+    "pmc.ncbi.nlm.nih.gov",
+)
 
 
 class PaperNotFoundError(Exception):
@@ -93,10 +109,12 @@ def retrieve_paper(
                 source=source,
             )
 
-        full_text = (
-            discover_full_text(openalex_work) if openalex_work is not None else None
+        candidates = (
+            discover_full_text_candidates(openalex_work)
+            if openalex_work is not None
+            else []
         )
-        if full_text is None:
+        if not candidates:
             paper.full_text_available = False
             return RetrievePaperResponse(
                 status=PaperRetrievalStatus.FULL_TEXT_UNAVAILABLE,
@@ -106,50 +124,82 @@ def retrieve_paper(
                 source=source,
             )
 
-        paper.full_text_available = True
-        paper.full_text_format = full_text.format
-        paper.full_text_url = full_text.url
-
-        try:
-            document = retrieve_document(
-                full_text.url,
-                expected_format=full_text.format,
-                client=http_client,
+        last_detail: str | None = None
+        for candidate in candidates:
+            logger.info(
+                "Trying full-text candidate: url=%s format=%s provider=%s",
+                candidate.url,
+                candidate.format,
+                candidate.provider,
             )
-        except DocumentRetrievalError as exc:
-            paper.full_text_available = False
-            paper.full_text_url = full_text.url
-            raise DocumentRetrievalFailure(str(exc)) from exc
+            paper.full_text_available = True
+            paper.full_text_format = candidate.format
+            paper.full_text_url = candidate.url
 
-        try:
-            sections = parse_document(
-                content=document.content,
-                doc_format=document.format,
-                text=document.text,
+            try:
+                document = retrieve_document(
+                    candidate.url,
+                    expected_format=candidate.format,
+                    client=http_client,
+                )
+            except DocumentRetrievalError as exc:
+                last_detail = str(exc)
+                logger.warning(
+                    "Full-text candidate rejected: url=%s reason=%s",
+                    candidate.url,
+                    last_detail,
+                )
+                continue
+
+            try:
+                sections = parse_document(
+                    content=document.content,
+                    doc_format=document.format,
+                    text=document.text,
+                )
+            except DocumentParseError as exc:
+                last_detail = exc.message
+                logger.warning(
+                    "Full-text candidate parsing failed: url=%s reason=%s",
+                    candidate.url,
+                    last_detail,
+                )
+                continue
+
+            chunks = chunk_sections(
+                sections=sections,
+                paper_id=paper.paper_id,
+                source_url=document.source_url,
             )
-        except DocumentParseError as exc:
-            return _parsing_failure_response(
+            if not chunks:
+                last_detail = "Paper retrieved but no evidence chunks were produced."
+                logger.warning(
+                    "Full-text candidate produced no chunks: url=%s",
+                    candidate.url,
+                )
+                continue
+
+            return RetrievePaperResponse(
+                status=PaperRetrievalStatus.SUCCESS,
                 paper=paper,
-                document=document,
-                full_text=full_text,
-                detail=exc.message,
+                sections=sections,
+                chunks=chunks,
+                source=PaperSource(
+                    url=document.source_url,
+                    provider=candidate.provider,
+                ),
             )
 
-        chunks = chunk_sections(
-            sections=sections,
-            paper_id=paper.paper_id,
-            source_url=document.source_url,
-        )
-
+        paper.full_text_available = False
+        paper.full_text_format = candidates[0].format
+        paper.full_text_url = candidates[0].url
         return RetrievePaperResponse(
-            status=PaperRetrievalStatus.SUCCESS,
+            status=PaperRetrievalStatus.FULL_TEXT_UNAVAILABLE,
             paper=paper,
-            sections=sections,
-            chunks=chunks,
-            source=PaperSource(
-                url=document.source_url,
-                provider=full_text.provider,
-            ),
+            sections=[],
+            chunks=[],
+            source=source,
+            detail=last_detail or "Full text is unavailable for evidence retrieval.",
         )
     finally:
         if owns_client:
@@ -183,28 +233,26 @@ def _parsing_failure_response(
 
 def discover_full_text(openalex_work: dict[str, Any]) -> FullTextCandidate | None:
     """Discover the best publicly accessible full-text source."""
+    candidates = discover_full_text_candidates(openalex_work)
+    if not candidates:
+        return None
+    for candidate in candidates:
+        if candidate.format == "pdf":
+            return candidate
+    return candidates[0]
+
+
+def discover_full_text_candidates(openalex_work: dict[str, Any]) -> list[FullTextCandidate]:
+    """Discover ordered publicly accessible full-text sources."""
     candidates: list[FullTextCandidate] = []
+    open_access = openalex_work.get("open_access")
+    work_is_oa = (
+        isinstance(open_access, dict) and open_access.get("is_oa") is True
+    )
 
-    def add_location(location: dict[str, Any] | None, provider: str) -> None:
-        if not isinstance(location, dict):
-            return
-
-        pdf_url = location.get("pdf_url")
-        if isinstance(pdf_url, str) and pdf_url.strip():
-            candidates.append(
-                FullTextCandidate(
-                    url=pdf_url.strip(),
-                    format="pdf",
-                    provider=provider,
-                )
-            )
-
-        oa_url = location.get("oa_url")
-        if isinstance(oa_url, str) and oa_url.strip():
-            normalized_url = oa_url.strip()
-            doc_format: DocumentFormat = (
-                "pdf" if normalized_url.lower().endswith(".pdf") else "html"
-            )
+    def add_candidate(url: str, doc_format: DocumentFormat, provider: str) -> None:
+        normalized_url = url.strip()
+        if normalized_url:
             candidates.append(
                 FullTextCandidate(
                     url=normalized_url,
@@ -212,6 +260,30 @@ def discover_full_text(openalex_work: dict[str, Any]) -> FullTextCandidate | Non
                     provider=provider,
                 )
             )
+
+    def add_location(location: dict[str, Any] | None, provider: str) -> None:
+        if not isinstance(location, dict):
+            return
+
+        pdf_url = location.get("pdf_url")
+        if isinstance(pdf_url, str) and pdf_url.strip():
+            add_candidate(pdf_url, "pdf", provider)
+
+        oa_url = location.get("oa_url")
+        if isinstance(oa_url, str) and oa_url.strip():
+            add_candidate(oa_url, _format_from_url(oa_url), provider)
+
+        is_oa = location.get("is_oa")
+        landing_page_url = location.get("landing_page_url")
+        if isinstance(landing_page_url, str) and landing_page_url.strip():
+            if is_oa is True or (
+                work_is_oa and _is_known_oa_repository(landing_page_url)
+            ):
+                add_candidate(
+                    landing_page_url,
+                    _format_from_url(landing_page_url),
+                    provider,
+                )
 
     add_location(openalex_work.get("best_oa_location"), "openalex")
     add_location(openalex_work.get("primary_location"), "openalex")
@@ -222,6 +294,26 @@ def discover_full_text(openalex_work: dict[str, Any]) -> FullTextCandidate | Non
             if isinstance(location, dict):
                 add_location(location, "openalex")
 
+    if isinstance(open_access, dict):
+        work_oa_url = open_access.get("oa_url")
+        if isinstance(work_oa_url, str) and work_oa_url.strip():
+            add_candidate(work_oa_url, _format_from_url(work_oa_url), "openalex")
+
+    deduped = _dedupe_candidates(candidates)
+    expanded = _expand_candidate_mirrors(deduped)
+    return _order_candidates(_dedupe_candidates(expanded))
+
+
+def _format_from_url(url: str) -> DocumentFormat:
+    return "pdf" if url.lower().endswith(".pdf") else "html"
+
+
+def _is_known_oa_repository(url: str) -> bool:
+    lowered = url.lower()
+    return any(host in lowered for host in _KNOWN_OA_REPOSITORY_HOSTS)
+
+
+def _dedupe_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCandidate]:
     deduped: list[FullTextCandidate] = []
     seen_urls: set[str] = set()
     for candidate in candidates:
@@ -229,11 +321,58 @@ def discover_full_text(openalex_work: dict[str, Any]) -> FullTextCandidate | Non
             continue
         seen_urls.add(candidate.url)
         deduped.append(candidate)
+    return deduped
 
-    for candidate in deduped:
-        if candidate.format == "pdf":
-            return candidate
-    return deduped[0] if deduped else None
+
+def _order_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCandidate]:
+    pdfs = [candidate for candidate in candidates if candidate.format == "pdf"]
+    html = [candidate for candidate in candidates if candidate.format == "html"]
+    return pdfs + html
+
+
+def _pmc_pdf_url_from_html(url: str) -> str | None:
+    match = _PMC_ARTICLE_PATTERN.search(url)
+    if match is None:
+        return None
+    pmc_id = match.group(1)
+    normalized_id = pmc_id if pmc_id.upper().startswith("PMC") else f"PMC{pmc_id}"
+    return f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/"
+
+
+def _europe_pmc_url_from_pmc_html(url: str) -> str | None:
+    match = _PMC_ARTICLE_PATTERN.search(url)
+    if match is None:
+        return None
+    pmc_id = match.group(1)
+    normalized_id = pmc_id if pmc_id.upper().startswith("PMC") else f"PMC{pmc_id}"
+    return f"https://europepmc.org/articles/{normalized_id}"
+
+
+def _expand_candidate_mirrors(
+    candidates: list[FullTextCandidate],
+) -> list[FullTextCandidate]:
+    expanded = list(candidates)
+    for candidate in candidates:
+        if candidate.format != "html" or "pmc" not in candidate.url.lower():
+            continue
+
+        pdf_url = _pmc_pdf_url_from_html(candidate.url)
+        if pdf_url is not None:
+            expanded.insert(
+                0,
+                FullTextCandidate(url=pdf_url, format="pdf", provider="pmc"),
+            )
+
+        europe_pmc_url = _europe_pmc_url_from_pmc_html(candidate.url)
+        if europe_pmc_url is not None:
+            expanded.append(
+                FullTextCandidate(
+                    url=europe_pmc_url,
+                    format="html",
+                    provider="europepmc",
+                )
+            )
+    return expanded
 
 
 def _fetch_openalex_work(doi: str, client: httpx.Client) -> dict[str, Any]:
@@ -356,5 +495,6 @@ __all__ = [
     "PaperNotFoundError",
     "PaperProviderError",
     "discover_full_text",
+    "discover_full_text_candidates",
     "retrieve_paper",
 ]

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -7,6 +9,8 @@ import httpx
 
 from app.config import MAX_DOCUMENT_SIZE, PAPER_REQUEST_TIMEOUT
 from app.services.citation_resolver import USER_AGENT
+
+logger = logging.getLogger(__name__)
 
 DocumentFormat = Literal["pdf", "html"]
 
@@ -19,9 +23,24 @@ HTML_CONTENT_TYPES = {
     "application/xhtml+xml",
 }
 
+_INTERSTITIAL_PATTERNS = (
+    re.compile(r"checking your browser", re.IGNORECASE),
+    re.compile(r"recaptcha", re.IGNORECASE),
+    re.compile(r"checking your browser before accessing", re.IGNORECASE),
+    re.compile(r"cf-browser-verification", re.IGNORECASE),
+    re.compile(r"just a moment\.\.\.", re.IGNORECASE),
+    re.compile(r"enable javascript and cookies", re.IGNORECASE),
+    re.compile(r"bot detection", re.IGNORECASE),
+    re.compile(r"access denied", re.IGNORECASE),
+)
+
 
 class DocumentRetrievalError(Exception):
     """Raised when a document cannot be retrieved."""
+
+
+class InterstitialPageError(DocumentRetrievalError):
+    """Raised when a download returns a browser challenge or anti-bot page."""
 
 
 class UnsupportedContentTypeError(DocumentRetrievalError):
@@ -41,6 +60,16 @@ class RetrievedDocument:
     source_url: str
 
 
+def is_interstitial_content(content: bytes, text: str | None = None) -> bool:
+    """Return True when downloaded content looks like a CAPTCHA or browser-check page."""
+    sample = text if text is not None else content.decode("utf-8", errors="replace")
+    normalized = sample.strip()
+    if not normalized:
+        return False
+
+    return any(pattern.search(normalized) for pattern in _INTERSTITIAL_PATTERNS)
+
+
 def retrieve_document(
     url: str,
     expected_format: DocumentFormat | None = None,
@@ -55,33 +84,63 @@ def retrieve_document(
     )
 
     try:
+        logger.info("Document retrieval started: candidate_url=%s", url)
+
         try:
-            response = http_client.get(url)
+            response = http_client.get(url, follow_redirects=True)
         except httpx.TimeoutException as exc:
             raise DocumentRetrievalError("Document request timed out.") from exc
         except httpx.RequestError as exc:
             raise DocumentRetrievalError("Document request failed.") from exc
+
+        final_url = str(response.url)
+        content_type = _normalize_content_type(
+            response.headers.get("content-type", "")
+        )
+
+        logger.info(
+            "Document retrieval response: candidate_url=%s status=%s final_url=%s content_type=%s",
+            url,
+            response.status_code,
+            final_url,
+            content_type or "unknown",
+        )
 
         if response.status_code >= 400:
             raise DocumentRetrievalError(
                 f"Document request failed with status {response.status_code}."
             )
 
-        content_type = _normalize_content_type(
-            response.headers.get("content-type", "")
-        )
         detected_format = _detect_format(content_type, url, expected_format)
 
         raw_content = _read_limited_content(response)
         _validate_downloaded_content(raw_content, detected_format, expected_format)
         text = raw_content.decode("utf-8", errors="replace") if detected_format == "html" else None
 
+        if detected_format == "html" and is_interstitial_content(raw_content, text):
+            logger.warning(
+                "Document retrieval rejected interstitial content: candidate_url=%s final_url=%s content_type=%s",
+                url,
+                final_url,
+                content_type or "unknown",
+            )
+            raise InterstitialPageError(
+                "Downloaded content is a browser challenge or anti-bot interstitial page."
+            )
+
+        logger.info(
+            "Document retrieval accepted: candidate_url=%s final_url=%s format=%s interstitial=false",
+            url,
+            final_url,
+            detected_format,
+        )
+
         return RetrievedDocument(
             content=raw_content,
             text=text,
             format=detected_format,
             content_type=content_type or detected_format,
-            source_url=str(response.url),
+            source_url=final_url,
         )
     finally:
         if owns_client:
@@ -132,6 +191,10 @@ def _validate_downloaded_content(
 
     if effective_format == "pdf":
         if not content.startswith(b"%PDF"):
+            if is_interstitial_content(content):
+                raise InterstitialPageError(
+                    "Downloaded content is a browser challenge or anti-bot interstitial page."
+                )
             raise DocumentRetrievalError(
                 "Downloaded content is not a valid PDF document."
             )

@@ -8,7 +8,9 @@ import pytest
 from app.services.document_retriever import (
     DocumentRetrievalError,
     DocumentTooLargeError,
+    InterstitialPageError,
     UnsupportedContentTypeError,
+    is_interstitial_content,
     retrieve_document,
 )
 
@@ -38,6 +40,10 @@ class TestDocumentRetriever:
 
         assert document.format == "html"
         assert "Example" in (document.text or "")
+        client.get.assert_called_once_with(
+            "https://example.org/paper.html",
+            follow_redirects=True,
+        )
 
     def test_successful_pdf_download(self) -> None:
         client = MagicMock(spec=httpx.Client)
@@ -111,7 +117,7 @@ class TestDocumentRetriever:
     def test_html_instead_of_pdf_rejected(self) -> None:
         client = MagicMock(spec=httpx.Client)
         client.get.return_value = _mock_response(
-            content=b"<!DOCTYPE html><html><body>Access denied</body></html>",
+            content=b"<!DOCTYPE html><html><body>Not a PDF document</body></html>",
             content_type="application/pdf",
             url="https://example.org/paper.pdf",
         )
@@ -122,3 +128,36 @@ class TestDocumentRetriever:
                 expected_format="pdf",
                 client=client,
             )
+
+    def test_captcha_interstitial_html_rejected(self) -> None:
+        captcha_html = b"""<!DOCTYPE html><html><body>
+        Checking your browser before accessing pmc.ncbi.nlm.nih.gov
+        reCAPTCHA
+        </body></html>"""
+        client = MagicMock(spec=httpx.Client)
+        client.get.return_value = _mock_response(content=captcha_html)
+
+        with pytest.raises(InterstitialPageError, match="interstitial"):
+            retrieve_document("https://pmc.ncbi.nlm.nih.gov/articles/PMC1/", client=client)
+
+    def test_valid_scientific_html_accepted(self) -> None:
+        scientific_html = b"""<!DOCTYPE html><html><body>
+        <p>Cas9 can be directed by RNA to cleave double-stranded DNA target sequences.</p>
+        </body></html>"""
+        client = MagicMock(spec=httpx.Client)
+        client.get.return_value = _mock_response(content=scientific_html)
+
+        document = retrieve_document(
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC6286148/",
+            client=client,
+        )
+
+        assert "Cas9" in (document.text or "")
+
+    def test_is_interstitial_content_detects_browser_check(self) -> None:
+        content = b"Checking your browser before accessing pmc.ncbi.nlm.nih.gov"
+        assert is_interstitial_content(content) is True
+
+    def test_is_interstitial_content_allows_scientific_text(self) -> None:
+        content = b"Cas9 endonuclease introduces double-stranded DNA breaks."
+        assert is_interstitial_content(content) is False
