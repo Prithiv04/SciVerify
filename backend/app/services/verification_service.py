@@ -22,6 +22,7 @@ from app.services.paper_retriever import (
     PaperNotFoundError,
     PaperProviderError,
 )
+from app.services.verification_validator import validate_verification_result
 from app.utils.claim_preprocessor import InvalidClaimError, preprocess_claim
 from app.utils.doi import InvalidDOIError
 
@@ -113,12 +114,24 @@ def analyze_verification(
             detail=str(exc),
         )
 
-    logger.info("verification_completed status=success verdict=%s", adjudicator.verdict.value)
+    validated = validate_verification_result(
+        claim=processed_claim.original,
+        evidence=evidence_response.evidence,
+        prosecutor=prosecutor,
+        defender=defender,
+        adjudicator=adjudicator,
+    )
+
+    logger.info(
+        "verification_completed status=success original_verdict=%s validated_verdict=%s",
+        adjudicator.verdict.value,
+        validated.verdict.value,
+    )
     return VerificationResponse(
         status=VerificationStatus.SUCCESS,
         claim=processed_claim.original,
-        verdict=adjudicator.verdict,
-        confidence=adjudicator.confidence,
+        verdict=validated.verdict,
+        confidence=validated.confidence,
         summary=adjudicator.analysis,
         reasoning=adjudicator.reasoning,
         paper=paper,
@@ -126,7 +139,9 @@ def analyze_verification(
         prosecutor=prosecutor,
         defender=defender,
         adjudicator=adjudicator,
-        suggested_correction=adjudicator.suggested_correction,
+        suggested_correction=validated.suggested_correction,
+        agent_agreement=validated.agent_agreement,
+        validation_warnings=validated.validation_warnings or None,
     )
 
 

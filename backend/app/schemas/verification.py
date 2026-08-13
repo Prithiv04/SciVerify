@@ -94,4 +94,6 @@ class VerificationResponse(BaseModel):
     defender: DefenderAnalysis | None = None
     adjudicator: AdjudicatorAnalysis | None = None
     suggested_correction: str | None = None
+    agent_agreement: bool | None = None
+    validation_warnings: list[str] | None = None
     detail: str | None = None

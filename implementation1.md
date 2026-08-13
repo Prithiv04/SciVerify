@@ -1,761 +1,477 @@
-# SciVerify Phase 6 — Milestone 5: Multi-Agent Verification Layer
-
-Implement **Phase 6 — Milestone 5** for the existing SciVerify repository.
+# Implementation Plan: Verification Decision Quality & Verdict Consistency
 
 ## Objective
 
-Build the backend multi-agent verification layer that transforms the existing pipeline:
+Improve the reliability and consistency of SciVerify's final verification verdict.
 
-DOI → Citation Resolution → Paper Retrieval → Evidence Retrieval & Ranking
+The current pipeline successfully:
 
-into:
+OpenAlex
+→ Full-text retrieval
+→ CAPTCHA/interstitial detection
+→ HTML/PDF parsing
+→ Evidence deduplication
+→ Evidence ranking
+→ Top 5 evidence
+→ Prosecutor
+→ Defender
+→ Adjudicator
+→ Final verdict
 
-DOI → Citation Resolution → Paper Retrieval → Evidence Retrieval → **Prosecutor → Defender → Adjudicator → Final Verification Result**
+The next improvement should focus on ensuring that the final verdict is logically consistent with the retrieved evidence and agent outputs.
 
-This milestone must initially be **backend-only**.
+DO NOT rewrite the existing retrieval/ranking pipeline.
 
-**Do NOT modify the frontend.**
+DO NOT modify the Groq/LLM provider unless absolutely necessary.
 
-The existing frontend mock verification flow must continue working exactly as it does now.
-
----
-
-# 1. Inspect the existing repository first
-
-Before writing code, inspect:
-
-* `backend/app/`
-* Existing schemas
-* Citation resolver
-* Paper retriever
-* Evidence retriever
-* Existing `VerificationResult` frontend type
-* Existing mock verification service
-* Existing API client
-* Existing configuration
-* Existing tests
-* `backend/README.md`
-
-Reuse existing abstractions wherever appropriate.
-
-Do not duplicate DOI resolution, paper retrieval, or evidence-ranking logic.
+DO NOT redesign the Prosecutor, Defender, or Adjudicator prompts unless required to fix a demonstrated inconsistency.
 
 ---
 
-# 2. Architecture
+# Step 1 — Inspect the existing verification pipeline
 
-The verification pipeline must be:
+Before making changes, inspect:
 
-```text
-POST /api/verification/analyze
-        ↓
-Validate claim + DOI
-        ↓
-Citation Resolver
-        ↓
-Paper Retrieval
-        ↓
-Evidence Retrieval & Ranking
-        ↓
-┌───────────────────────────────┐
-│      Multi-Agent Layer        │
-│                               │
-│  Prosecutor                   │
-│       ↓                       │
-│  Defender                     │
-│       ↓                       │
-│  Adjudicator                  │
-└───────────────────────────────┘
-        ↓
-Final Verification Result
-```
+- backend/app/services/
+- verification-related services
+- Prosecutor implementation
+- Defender implementation
+- Adjudicator implementation
+- verification schemas/models
+- evidence pipeline
+- existing verification tests
 
-The agents should operate on the retrieved evidence rather than independently downloading papers.
+Understand exactly how:
+
+1. Evidence is passed to Prosecutor
+2. Evidence is passed to Defender
+3. Agent outputs are normalized
+4. Adjudicator receives the agent results
+5. Final verdict is generated
+6. Confidence is calculated
+7. Suggested correction is generated
+
+Do not rewrite working functionality.
 
 ---
 
-# 3. Agent 1 — Prosecutor
+# Step 2 — Define verdict consistency rules
 
-Create a dedicated prosecutor service.
+Create deterministic validation rules for the final result.
 
-Purpose:
+Supported verdicts:
 
-> Attempt to disprove, weaken, or challenge the scientific claim using the retrieved evidence.
+- SUPPORTS
+- OVERSTATED
+- CONTRADICTS
+- INSUFFICIENT
+- FABRICATED
 
-The Prosecutor should analyze:
+The validator should check whether the final verdict is compatible with the available evidence and agent outputs.
 
-* Contradictory evidence
-* Numerical mismatches
-* Unsupported conclusions
-* Overstated claims
-* Missing conditions
-* Scope limitations
-* Population/sample mismatches
-* Methodological limitations
-* Evidence that only partially supports the claim
-
-Return a structured result.
-
-Suggested fields:
-
-```text
-agent
-analysis
-stance
-key_points
-supporting_evidence
-contradicting_evidence
-confidence
-```
-
-The Prosecutor must **not invent evidence**.
-
-Every evidence reference must correspond to an actual retrieved evidence chunk.
-
----
-
-# 4. Agent 2 — Defender
-
-Create a dedicated defender service.
-
-Purpose:
-
-> Build the strongest evidence-based case that the claim is supported by the cited paper.
-
-Analyze:
-
-* Direct supporting statements
-* Matching numerical values
-* Relevant Results/Methods evidence
-* Experimental findings
-* Appropriate context
-* Conditions under which the claim is valid
-* Strength and relevance of supporting evidence
-
-Return the same general structured contract where practical.
-
-The Defender must also **never invent evidence**.
-
-All evidence references must map to retrieved evidence chunks.
-
----
-
-# 5. Agent 3 — Adjudicator
-
-Create a dedicated adjudicator service.
-
-Purpose:
-
-> Evaluate the original claim, retrieved evidence, Prosecutor analysis, and Defender analysis and produce the final verdict.
-
-The Adjudicator must consider both sides rather than simply selecting whichever agent sounds more confident.
-
-Supported verdicts must match the existing SciVerify frontend contract:
-
-```text
-SUPPORTS
-OVERSTATED
-CONTRADICTS
-INSUFFICIENT
-FABRICATED
-```
-
-The result should include:
-
-```text
-verdict
-confidence
-summary
-reasoning
-supporting_evidence
-contradicting_evidence
-suggested_correction
-```
-
-The adjudicator must distinguish:
+Examples:
 
 ### SUPPORTS
 
-The cited evidence directly supports the claim with appropriate context.
+Appropriate when:
+
+- Strong supporting evidence exists
+- Evidence directly addresses the claim
+- Defender supports the claim
+- There is no strong contradiction
 
 ### OVERSTATED
 
-The evidence supports part of the claim, but the claim exaggerates magnitude, certainty, scope, or conclusion.
+Appropriate when:
+
+- Core claim is supported
+- But the claim is broader/stronger than the evidence
+- Important conditions, limitations, or qualifiers are missing
+
+Example:
+
+Claim:
+"Cas9 can cleave any DNA sequence."
+
+Evidence:
+Cas9 can cleave target DNA when an appropriate PAM is present.
+
+Expected:
+OVERSTATED
 
 ### CONTRADICTS
 
-The available evidence directly conflicts with the claim.
+Appropriate when:
+
+- Evidence directly conflicts with the claim
+- Strong contradictory evidence exists
 
 ### INSUFFICIENT
 
-There is not enough evidence to determine whether the claim is supported or contradicted.
+Appropriate when:
+
+- Evidence is missing
+- Evidence is irrelevant
+- Evidence quality is too weak
+- Evidence cannot establish whether the claim is true or false
 
 ### FABRICATED
 
-The claimed result/content cannot be substantiated from the cited source or the citation/evidence relationship is fundamentally invalid.
+Appropriate only when:
 
-Do not use `FABRICATED` simply because evidence retrieval failed.
+- The cited paper does not contain the claimed information
+- The claim appears to attribute unsupported information to the paper
+- There is strong evidence that the citation cannot support the claim
+
+Do not classify normal uncertainty as FABRICATED.
 
 ---
 
-# 6. LLM abstraction
+# Step 3 — Add deterministic verdict validation
 
-Do not hard-code an LLM provider throughout the application.
+Create a small validation layer after the Adjudicator result.
 
-Create a provider abstraction such as:
+Possible location:
 
-```text
-LLMProvider
-```
+backend/app/services/verification_validator.py
 
-with a method similar to:
+or another appropriate existing verification service.
 
-```text
-generate(...)
-```
+The validator should receive:
 
-The agent services should depend on this abstraction.
+- claim
+- retrieved evidence
+- Prosecutor result
+- Defender result
+- Adjudicator result
 
-Allow the implementation to support an LLM provider through environment configuration.
+It should return:
 
-Use environment variables for provider configuration.
+- validated verdict
+- confidence adjustment if necessary
+- validation warnings/reasons
+
+Important:
+
+The validator must NOT blindly override the LLM.
+
+It should only correct obvious contradictions between:
+
+- evidence
+- agent stances
+- final verdict
+
+---
+
+# Step 4 — Evidence strength checks
+
+Use existing evidence metadata where possible.
+
+Consider:
+
+- relevance_score
+- claim_overlap
+- numeric_overlap
+- section
+- supporting_evidence
+- contradicting_evidence
+- number of unique evidence items
+
+Do NOT introduce hard-coded biology-specific keywords.
+
+The logic must remain domain-independent.
+
+Example:
+
+If the adjudicator says SUPPORTS but:
+
+- there are zero supporting evidence IDs
+- all evidence is unrelated
+- claim overlap is extremely low
+
+then flag the result as inconsistent.
+
+Example:
+
+If adjudicator says CONTRADICTS but:
+
+- no contradicting evidence exists
+- all evidence supports the claim
+
+then flag the result.
+
+---
+
+# Step 5 — Confidence calibration
+
+Improve confidence reliability.
+
+Do not allow confidence to remain extremely high when evidence quality is poor.
 
 For example:
 
-```text
-LLM_PROVIDER=
-LLM_API_KEY=
-LLM_MODEL=
-LLM_BASE_URL=
-```
+If:
 
-Do not commit real API keys.
+- verdict = SUPPORTS
+- evidence count = 1
+- relevance_score is low
+- claim overlap is low
 
-Update:
+then confidence should be reduced.
 
-```text
-backend/.env.example
-```
+If:
 
-with placeholders only.
+- multiple unique evidence chunks strongly match the claim
+- evidence comes from meaningful article sections
+- Prosecutor and Defender agree
 
----
+then confidence can remain high.
 
-# 7. Deterministic fallback
+Do not invent scientific probabilities.
 
-The architecture must not make the entire backend unusable when an LLM API key is missing.
-
-Implement a safe development/test mode.
-
-If the configured LLM provider is unavailable, return a controlled application-level result rather than crashing.
-
-Do not fabricate a successful scientific verdict just because the LLM is unavailable.
-
-A safe response should clearly indicate that verification could not be completed.
+Confidence should represent verification confidence, not scientific certainty.
 
 ---
 
-# 8. Evidence grounding
+# Step 6 — Agent disagreement handling
 
-This is critical.
+Explicitly detect disagreement.
 
-The agents must receive only the evidence returned by:
+Examples:
 
-```text
-POST /api/evidence/retrieve
-```
+Prosecutor:
+Challenge
 
-Each evidence item should retain:
+Defender:
+Support
 
-* `chunk_id`
-* `section`
-* `chunk_index`
-* `text`
-* `relevance_score`
-* `source_url`
-* `page`
-* numeric overlap information
-
-The agent prompt must explicitly instruct:
-
-> Use only the supplied evidence. Do not invent papers, quotes, numbers, citations, or experimental results.
-
-Agent outputs should reference evidence using `chunk_id`.
-
-Validate returned evidence references against the actual retrieved chunks.
-
-Ignore or reject hallucinated chunk IDs.
-
----
-
-# 9. Structured agent outputs
-
-Do not rely on free-form LLM responses if structured output can be enforced.
-
-Create Pydantic schemas for:
-
-```text
-ProsecutorAnalysis
-DefenderAnalysis
-AdjudicatorAnalysis
-VerificationResponse
-```
-
-Keep the schemas strongly typed and easy for the frontend to consume later.
-
----
-
-# 10. Verification API
-
-Create:
-
-```text
-POST /api/verification/analyze
-```
-
-Request:
-
-```json
-{
-  "claim": "The method improves accuracy by 40%.",
-  "doi": "10.xxxx/xxxxx"
-}
-```
-
-The endpoint should execute:
-
-```text
-resolve citation
-→ retrieve paper
-→ retrieve evidence
-→ prosecutor
-→ defender
-→ adjudicator
-→ final response
-```
-
-Do not duplicate logic from existing services.
-
----
-
-# 11. Response contract
-
-The final response should be compatible with the existing frontend `VerificationResult` concept.
-
-Include information such as:
-
-```json
-{
-  "status": "success",
-  "claim": "...",
-  "verdict": "SUPPORTS",
-  "confidence": 0.91,
-  "summary": "...",
-  "reasoning": "...",
-
-  "paper": {
-    "paper_id": "...",
-    "doi": "...",
-    "title": "..."
-  },
-
-  "evidence": [],
-
-  "prosecutor": {
-    "stance": "...",
-    "analysis": "...",
-    "key_points": [],
-    "confidence": 0.0
-  },
-
-  "defender": {
-    "stance": "...",
-    "analysis": "...",
-    "key_points": [],
-    "confidence": 0.0
-  },
-
-  "adjudicator": {
-    "analysis": "...",
-    "confidence": 0.0
-  },
-
-  "suggested_correction": null
-}
-```
-
-Adapt the exact structure to the existing repository contracts rather than unnecessarily replacing them.
-
----
-
-# 12. Error handling
-
-Handle each stage separately.
-
-Expected cases:
-
-### Invalid claim
-
-Return:
-
-```text
-400
-```
-
-### Invalid DOI
-
-Return:
-
-```text
-400
-```
-
-### Citation not found
-
-Return:
-
-```text
-404
-```
-
-### Paper unavailable
-
-Return an appropriate controlled response.
-
-### No full text
-
-Do not run the agents without evidence.
-
-Return a meaningful status such as:
-
-```text
-insufficient_evidence
-```
-
-### No relevant evidence
-
-Return:
-
-```text
-insufficient_evidence
-```
-
-### LLM provider failure
-
-Return a controlled service/application error.
-
-Never expose API keys or internal provider credentials.
-
-### Agent output validation failure
-
-Do not silently accept malformed or hallucinated agent output.
-
-Return a controlled error and log enough information for debugging without exposing secrets.
-
----
-
-# 13. Agent execution strategy
-
-For the first implementation, prioritize correctness and traceability over performance.
-
-Use a clear sequence:
-
-```text
-Prosecutor
-   ↓
-Defender
-   ↓
-Adjudicator
-```
-
-The Adjudicator receives:
-
-* Original claim
-* Evidence
-* Prosecutor analysis
-* Defender analysis
-
-The Prosecutor and Defender should not receive each other's analysis.
-
-This keeps their perspectives independent.
-
----
-
-# 14. Configuration
-
-Extend:
-
-```text
-backend/app/config.py
-```
-
-with appropriate LLM configuration.
-
-Do not hard-code:
-
-* API keys
-* model secrets
-* provider credentials
-* private URLs
-
-Update:
-
-```text
-backend/.env.example
-```
-
-with safe placeholders.
-
----
-
-# 15. Tests
-
-This milestone must have comprehensive automated tests.
-
-Add tests for:
-
-### Agent tests
-
-* Prosecutor correctly receives claim + evidence
-* Defender correctly receives claim + evidence
-* Adjudicator receives both analyses
-* Evidence references are validated
-* Hallucinated chunk IDs are rejected
-* Structured output validation works
-
-### Verdict tests
-
-Test all five verdicts:
-
-```text
+Adjudicator:
 SUPPORTS
+
+This is not automatically wrong.
+
+However, the system should record that there was agent disagreement.
+
+Add a field if appropriate:
+
+agent_agreement
+
+or
+
+validation_warnings
+
+Do not break the existing API unnecessarily.
+
+Prefer backward-compatible additions.
+
+---
+
+# Step 7 — Suggested correction consistency
+
+Validate suggested corrections.
+
+If verdict is:
+
+SUPPORTS
+
+then suggested_correction should normally be null.
+
+If verdict is:
+
 OVERSTATED
+
+then a useful correction should normally exist.
+
+If verdict is:
+
 CONTRADICTS
+
+a correction may be provided if the evidence allows one.
+
+If verdict is:
+
 INSUFFICIENT
-FABRICATED
-```
 
-### API tests
+do not invent a corrected scientific claim.
 
-Test:
+The correction must not introduce information unsupported by the evidence.
 
-* Valid request
-* Invalid claim
-* Invalid DOI
-* Citation failure
-* Paper retrieval failure
-* No evidence
-* LLM unavailable
-* Malformed agent output
-* Successful end-to-end mocked verification
-
-All external LLM calls must be mocked.
-
-Do not make the automated test suite depend on a real LLM API key.
+Do not use another LLM call just to validate the correction unless absolutely necessary.
 
 ---
 
-# 16. End-to-end mocked test
+# Step 8 — Preserve existing API behavior
 
-Create at least one test covering:
+Do NOT break the current response schema.
 
-```text
-claim
- ↓
-citation resolver mock
- ↓
-paper retrieval mock
- ↓
-evidence retrieval mock
- ↓
-prosecutor mock
- ↓
-defender mock
- ↓
-adjudicator mock
- ↓
-final VerificationResponse
-```
+Existing fields must continue to work:
 
-Verify that:
+- status
+- claim
+- verdict
+- confidence
+- summary
+- reasoning
+- paper
+- evidence
+- prosecutor
+- defender
+- adjudicator
+- suggested_correction
+- detail
 
-* The correct claim reaches every stage
-* Evidence reaches both agents
-* The Adjudicator receives both analyses
-* The final verdict is returned correctly
-* Evidence references are preserved
-* No frontend code is required
+If new fields are needed, make them optional/backward-compatible.
 
 ---
 
-# 17. Logging
+# Step 9 — Unit tests
 
-Add useful backend logging for:
+Add deterministic unit tests.
 
-```text
-verification_started
-citation_resolved
-paper_retrieved
-evidence_retrieved
-prosecutor_completed
-defender_completed
-adjudicator_completed
-verification_completed
-```
+Do NOT call Groq in these tests.
 
-Do not log:
+Test at minimum:
 
-* API keys
-* Authorization headers
-* Secrets
-* Full sensitive provider responses unnecessarily
+1. SUPPORTS with strong supporting evidence
+2. SUPPORTS with weak/irrelevant evidence
+3. OVERSTATED with strong evidence but missing qualifier
+4. CONTRADICTS with strong contradictory evidence
+5. INSUFFICIENT with no useful evidence
+6. FABRICATED with unsupported citation evidence
+7. Adjudicator SUPPORTS but no supporting evidence
+8. Adjudicator CONTRADICTS but no contradicting evidence
+9. Prosecutor/Defender disagreement
+10. High confidence with weak evidence → confidence reduced
+11. OVERSTATED → suggested correction exists
+12. SUPPORTS → correction normally null
+13. INSUFFICIENT → no fabricated correction
+14. Evidence IDs referenced by agents must exist in retrieved evidence
 
----
-
-# 18. Frontend constraint
-
-Do **not** modify:
-
-* React components
-* Dashboard
-* VerifyPage
-* Zustand stores
-* Mock verification service
-* Existing UI
-
-The frontend should continue using the mock verification flow after Milestone 5.
-
-Frontend integration will be handled in a later milestone.
+All tests must be deterministic.
 
 ---
 
-# 19. Backward compatibility
+# Step 10 — Regression testing
 
-Do not break:
+Run the complete test suite:
 
-```text
-GET /api/health
-POST /api/citations/resolve
-POST /api/papers/retrieve
-POST /api/evidence/retrieve
-```
+python -m pytest -q
 
-All existing tests must continue passing.
+Expected:
 
----
+All existing tests continue passing.
 
-# 20. Documentation
+The current baseline is:
 
-Update:
+162 passed
 
-```text
-backend/README.md
-```
-
-with:
-
-* Milestone 5 architecture
-* Agent responsibilities
-* Verification endpoint
-* Request/response example
-* Environment variables
-* How to run
-* How to test
-* LLM provider configuration
-* Limitations
-
-Do not document fake capabilities.
+Do not accept regressions.
 
 ---
 
-# 21. Validation requirements
+# Step 11 — Live verification
 
-Before declaring Milestone 5 complete, run:
+Do not repeatedly call Groq while developing.
 
-```powershell
-cd backend
-.venv\Scripts\Activate.ps1
-python -m pytest
-```
+The Groq organization currently has a daily token limit and may return:
 
-Then:
+HTTP 429
+tokens per day (TPD)
 
-```powershell
-cd frontend
-npm run lint
-npm run build
-```
+Therefore:
 
-All existing and new backend tests must pass.
+- Use mocked/unit tests during implementation
+- Avoid unnecessary live calls
+- Perform only one or two live verification tests after implementation
+- Use the existing Cas9 DOI test once Groq quota resets
 
-The frontend must remain unchanged and continue to build successfully.
+DOI:
 
----
+10.1126/science.1225829
 
-# 22. Important implementation constraints
+Claim:
 
-Do NOT:
+Cas9 can be programmed with guide RNA to cleave specific double-stranded DNA target sequences.
 
-* Implement frontend integration
-* Replace the existing mock workflow
-* Add a vector database
-* Introduce unnecessary infrastructure
-* Hard-code an API key
-* Bypass citation/paper/evidence services
-* Invent evidence
-* Allow agents to cite nonexistent chunks
-* Treat LLM confidence as scientific truth
-* Claim verification succeeded when evidence is unavailable
+Expected behavior:
 
-Keep the implementation modular so that the next milestone can easily connect the real frontend to:
+The evidence strongly supports the core claim but indicates an important PAM requirement.
 
-```text
-POST /api/verification/analyze
-```
+A reasonable verdict is:
+
+OVERSTATED
+
+with a correction similar to:
+
+"Cas9 can be programmed with guide RNA to cleave specific double-stranded DNA target sequences, provided that the target sequence is adjacent to a PAM sequence."
+
+Do not hard-code this expected verdict into production logic.
 
 ---
 
-# 23. Completion criteria
+# Step 12 — Logging
 
-Milestone 5 is complete only when:
+Add concise diagnostic logging.
 
-* [ ] Prosecutor service implemented
-* [ ] Defender service implemented
-* [ ] Adjudicator service implemented
-* [ ] LLM provider abstraction implemented
-* [ ] Structured Pydantic agent schemas implemented
-* [ ] Evidence grounding implemented
-* [ ] Evidence-reference validation implemented
-* [ ] `POST /api/verification/analyze` implemented
-* [ ] All five verdicts supported
-* [ ] Error handling implemented
-* [ ] LLM calls mocked in tests
-* [ ] End-to-end mocked verification test passes
-* [ ] Existing Milestone 1–4 tests still pass
-* [ ] Backend README updated
-* [ ] `.env.example` contains placeholders only
-* [ ] Frontend files remain unchanged
-* [ ] `npm run lint` passes
-* [ ] `npm run build` passes
+Log:
 
-## Final instruction
+- original adjudicator verdict
+- validated verdict
+- evidence count
+- supporting evidence count
+- contradicting evidence count
+- agent agreement/disagreement
+- confidence before/after validation
+- validation warnings
 
-First inspect the existing codebase and architecture.
+Never log:
 
-Then implement **Milestone 5 only**.
+- API keys
+- secrets
+- full prompts
+- unnecessary sensitive content
 
-Do not move on to frontend integration or any later milestone.
+---
 
-After implementation, provide a concise report containing:
+# Step 13 — Acceptance criteria
 
-1. Files created
-2. Files modified
-3. API endpoint
-4. Agent responsibilities
-5. LLM provider abstraction
-6. Test count/results
-7. Frontend validation
-8. Any limitations
-9. Whether anything was committed or pushed
+The implementation is complete only when:
 
-Do not commit or push anything automatically.
+- [ ] Existing evidence retrieval remains unchanged
+- [ ] Existing evidence ranking remains unchanged
+- [ ] Prosecutor/Defender behavior remains unchanged unless absolutely necessary
+- [ ] Adjudicator behavior remains unchanged unless absolutely necessary
+- [ ] Final verdict consistency is validated
+- [ ] Weak evidence cannot produce unjustifiably high confidence
+- [ ] Agent disagreement is detectable
+- [ ] Suggested correction is consistent with verdict
+- [ ] Evidence IDs are validated
+- [ ] No domain-specific hard-coded rules are introduced
+- [ ] No Groq calls are used in unit tests
+- [ ] All existing tests pass
+- [ ] New deterministic tests pass
+- [ ] API remains backward compatible
+
+Target:
+
+162+ tests passing.
+
+---
+
+# Important Constraints
+
+1. Do not modify the retrieval/parser/ranking implementation.
+2. Do not undo the previous evidence-quality improvements.
+3. Do not add biology-specific rules.
+4. Do not add unnecessary LLM calls.
+5. Do not depend on Groq availability for tests.
+6. Prefer deterministic validation over another AI call.
+7. Keep the implementation modular and easy to remove/adjust.
+8. Inspect the existing code before editing.
+9. Show the files that will be modified before making broad changes.
+10. After implementation, provide:
+   - files changed
+   - logic added
+   - tests added
+   - total test count
+   - any remaining limitations
