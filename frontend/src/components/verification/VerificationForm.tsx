@@ -122,8 +122,8 @@ export function VerificationForm({ onSubmit, loading = false }: VerificationForm
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-text-muted">
-          Demo workflow — mock verification only. No real AI or external APIs are
-          called.
+          Submissions are sent to the SciVerify backend for evidence retrieval and
+          multi-agent analysis.
         </p>
         <Button
           type="submit"

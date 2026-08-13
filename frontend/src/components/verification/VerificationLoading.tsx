@@ -9,6 +9,7 @@ import type { AgentStatus } from '@/types'
 export interface VerificationLoadingProps {
   stageIndex: number
   message?: string
+  indeterminate?: boolean
 }
 
 const agentMeta = {
@@ -68,11 +69,13 @@ function getAgentDescription(
 export function VerificationLoading({
   stageIndex,
   message,
+  indeterminate = false,
 }: VerificationLoadingProps) {
   const pipelineStages = VERIFICATION_STAGES.filter(
     (stage) => stage.group === 'pipeline',
   )
   const currentStage = VERIFICATION_STAGES[stageIndex]
+  const activePipelineIndex = indeterminate ? 0 : stageIndex
 
   return (
     <div className="space-y-6">
@@ -91,8 +94,13 @@ export function VerificationLoading({
             (item) => item.id === stage.id,
           )
           let status: 'pending' | 'active' | 'completed' = 'pending'
-          if (stageIndex > stagePosition) status = 'completed'
-          if (stageIndex === stagePosition) status = 'active'
+          if (indeterminate) {
+            status = index === 0 ? 'active' : 'pending'
+          } else if (activePipelineIndex > stagePosition) {
+            status = 'completed'
+          } else if (activePipelineIndex === stagePosition) {
+            status = 'active'
+          }
 
           return (
             <ProgressStep
@@ -121,10 +129,15 @@ export function VerificationLoading({
             name={agentMeta.prosecutor.name}
             role={agentMeta.prosecutor.role}
             icon={agentMeta.prosecutor.icon}
-            status={getAgentStatus('prosecutor', stageIndex)}
-            description={getAgentDescription('prosecutor', stageIndex, message)}
+            status={indeterminate ? 'running' : getAgentStatus('prosecutor', stageIndex)}
+            description={
+              indeterminate
+                ? 'Waiting for backend analysis...'
+                : getAgentDescription('prosecutor', stageIndex, message)
+            }
             className={cn(
-              getAgentStatus('prosecutor', stageIndex) === 'running' &&
+              (indeterminate ||
+                getAgentStatus('prosecutor', stageIndex) === 'running') &&
                 'ring-1 ring-primary/40',
             )}
           />
@@ -138,8 +151,12 @@ export function VerificationLoading({
             name={agentMeta.defender.name}
             role={agentMeta.defender.role}
             icon={agentMeta.defender.icon}
-            status={getAgentStatus('defender', stageIndex)}
-            description={getAgentDescription('defender', stageIndex, message)}
+            status={indeterminate ? 'idle' : getAgentStatus('defender', stageIndex)}
+            description={
+              indeterminate
+                ? 'Waiting for backend analysis...'
+                : getAgentDescription('defender', stageIndex, message)
+            }
             className={cn(
               getAgentStatus('defender', stageIndex) === 'running' &&
                 'ring-1 ring-primary/40',
@@ -155,8 +172,12 @@ export function VerificationLoading({
           name={agentMeta.adjudicator.name}
           role={agentMeta.adjudicator.role}
           icon={agentMeta.adjudicator.icon}
-          status={getAgentStatus('adjudicator', stageIndex)}
-          description={getAgentDescription('adjudicator', stageIndex, message)}
+            status={indeterminate ? 'idle' : getAgentStatus('adjudicator', stageIndex)}
+            description={
+              indeterminate
+                ? 'Waiting for backend analysis...'
+                : getAgentDescription('adjudicator', stageIndex, message)
+            }
           className={cn(
             getAgentStatus('adjudicator', stageIndex) === 'running' &&
               'ring-1 ring-primary/40',
@@ -164,7 +185,11 @@ export function VerificationLoading({
         />
       </div>
 
-      {stageIndex >= VERIFICATION_STAGES.length - 1 ? (
+      {indeterminate ? (
+        <Panel padding="md" className="text-sm text-text-secondary">
+          Waiting for the SciVerify backend to complete verification...
+        </Panel>
+      ) : stageIndex >= VERIFICATION_STAGES.length - 1 ? (
         <Panel padding="md" className="text-sm text-text-secondary">
           Generating final verdict...
         </Panel>

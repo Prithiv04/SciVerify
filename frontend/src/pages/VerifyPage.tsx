@@ -5,7 +5,7 @@ import { AppHeader } from '@/components/app/AppHeader'
 import { VerificationForm } from '@/components/verification/VerificationForm'
 import { VerificationLoading } from '@/components/verification/VerificationLoading'
 import { VerificationResultView } from '@/components/verification/VerificationResultView'
-import { verifyCitationMock } from '@/services/mockVerificationService'
+import { verifyCitation } from '@/services/verificationService'
 import { useVerificationStore } from '@/stores/verificationStore'
 import { ROUTES, verificationReportPath } from '@/constants'
 import { Button } from '@/components/ui/Button'
@@ -22,8 +22,6 @@ export default function VerifyPage() {
   const addRecord = useVerificationStore((state) => state.addRecord)
 
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>('idle')
-  const [loadingStageIndex, setLoadingStageIndex] = useState(0)
-  const [loadingMessage, setLoadingMessage] = useState<string>()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const storedRecord = verificationId ? getRecord(verificationId) : undefined
@@ -51,27 +49,19 @@ export default function VerifyPage() {
   const handleSubmit = async (values: VerificationFormSchema) => {
     setSubmissionPhase('loading')
     setErrorMessage(null)
-    setLoadingStageIndex(0)
-    setLoadingMessage(undefined)
 
     try {
-      const verificationResult = await verifyCitationMock(
-        {
-          claim: values.claim,
-          citation: values.citation,
-          sourceType: values.sourceType,
-          context: values.context,
-        },
-        (update) => {
-          setLoadingStageIndex(update.stageIndex)
-          setLoadingMessage(update.message)
-        },
-      )
+      const verificationResult = await verifyCitation({
+        claim: values.claim,
+        citation: values.citation,
+        sourceType: values.sourceType,
+        context: values.context,
+      })
 
       addRecord(verificationResult)
       setSubmissionPhase('idle')
       navigate(verificationReportPath(verificationResult.id), { replace: true })
-      toast.success('Mock verification completed.')
+      toast.success('Verification completed.')
     } catch (error) {
       setSubmissionPhase('error')
       setErrorMessage(
@@ -79,7 +69,11 @@ export default function VerifyPage() {
           ? error.message
           : 'Verification could not be completed.',
       )
-      toast.error('Verification could not be completed.')
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Verification could not be completed.',
+      )
     }
   }
 
@@ -120,7 +114,7 @@ export default function VerifyPage() {
         <AppHeader
           eyebrow="Verifying"
           title="Running verification pipeline"
-          description="Prosecutor, Defender, and Adjudicator are analyzing the cited evidence."
+          description="SciVerify is analyzing the cited paper and running the multi-agent verification workflow."
         />
       ) : (
         <AppHeader
@@ -130,13 +124,17 @@ export default function VerifyPage() {
       )}
 
       {phase === 'form' ? (
-        <VerificationForm onSubmit={handleSubmit} />
+        <VerificationForm
+          onSubmit={handleSubmit}
+          loading={submissionPhase === 'loading'}
+        />
       ) : null}
 
       {phase === 'loading' ? (
         <VerificationLoading
-          stageIndex={loadingStageIndex}
-          message={loadingMessage}
+          stageIndex={0}
+          message="Analyzing claim against cited paper..."
+          indeterminate
         />
       ) : null}
 
