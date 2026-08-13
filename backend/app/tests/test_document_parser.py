@@ -19,6 +19,24 @@ SAMPLE_HTML = """
 </html>
 """
 
+SAMPLE_PMC_HTML = """
+<html>
+  <head><meta name="ncbi_db" content="pmc"></head>
+  <body>
+    <div id="ncbi-header">Search NCBI Primary site navigation</div>
+    <div id="mc">
+      <h2>Abstract</h2>
+      <p>Cas9 can be directed by RNA to cleave double-stranded DNA target sequences.</p>
+      <h2>PERMALINK</h2>
+      <p>Permalink page controls should be ignored.</p>
+      <h2>Results</h2>
+      <p>Cas9 can be directed by RNA to cleave double-stranded DNA target sequences.</p>
+      <div><p>Cas9 can be directed by RNA to cleave double-stranded DNA target sequences.</p></div>
+    </div>
+  </body>
+</html>
+"""
+
 
 class TestDocumentParser:
     def test_simple_html_sections(self) -> None:
@@ -75,6 +93,23 @@ class TestDocumentParser:
         with pytest.raises(DocumentParseError) as exc_info:
             parse_html("   ")
         assert exc_info.value.reason == "html_empty"
+
+    def test_pmc_html_excludes_navigation_and_permalink(self) -> None:
+        sections = parse_html(SAMPLE_PMC_HTML)
+
+        combined = "\n".join(section.text for section in sections)
+        assert "Cas9 can be directed by RNA" in combined
+        assert "Search NCBI" not in combined
+        assert "Permalink page controls" not in combined
+        assert all(section.section_name != "PERMALINK" for section in sections)
+
+    def test_pmc_html_deduplicates_repeated_article_text(self) -> None:
+        sections = parse_html(SAMPLE_PMC_HTML)
+        abstract_sections = [section for section in sections if section.section_name == "Abstract"]
+        results_sections = [section for section in sections if section.section_name == "Results"]
+
+        assert len(abstract_sections) == 1
+        assert len(results_sections) == 1
 
 
 class TestTextCleaning:

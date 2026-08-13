@@ -112,17 +112,7 @@ def build_evidence_response(
         status=EvidenceRetrievalStatus.SUCCESS,
         claim=claim,
         paper=paper_summary,
-        evidence=_dedupe_evidence_items(ranked),
+        evidence=ranked,
         total_chunks_considered=len(chunks),
     )
 
-
-def _dedupe_evidence_items(items: list[EvidenceItem]) -> list[EvidenceItem]:
-    seen: set[str] = set()
-    deduped: list[EvidenceItem] = []
-    for item in items:
-        if item.chunk_id in seen:
-            continue
-        seen.add(item.chunk_id)
-        deduped.append(item)
-    return deduped

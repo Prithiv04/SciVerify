@@ -89,8 +89,8 @@ class TestEvidenceRanking:
 
         ranked = rank_evidence_for_claim(claim, chunks, min_relevance=0.0)
 
+        assert len(ranked) == 1
         assert ranked[0].chunk_id == "c1"
-        assert ranked[0].relevance_score >= ranked[1].relevance_score
 
     def test_deterministic_ordering(self) -> None:
         claim = preprocess_claim("accuracy improved on software tasks")
@@ -122,6 +122,44 @@ class TestEvidenceRanking:
         ranked = rank_evidence_for_claim(claim, [chunk, chunk], min_relevance=0.0)
 
         assert len(ranked) == 1
+
+    def test_duplicate_evidence_text_keeps_highest_score(self) -> None:
+        claim = preprocess_claim("Cas9 can be directed by RNA to cleave DNA.")
+        shared_text = (
+            "Cas9 can be directed by RNA to introduce site-specific "
+            "double-stranded breaks in target DNA."
+        )
+        chunks = [
+            _chunk("permalink:63", "PERMALINK", shared_text, 63),
+            _chunk("permalink:90", "PERMALINK", shared_text, 90),
+            _chunk("results:1", "Results", shared_text + " Additional context.", 1),
+        ]
+
+        ranked = rank_evidence_for_claim(claim, chunks, min_relevance=0.0)
+
+        assert len(ranked) == 2
+        assert ranked[0].chunk_id == "results:1"
+        assert all(
+            item.text
+            != ranked[1].text
+            or item.chunk_id == ranked[1].chunk_id
+            for item in ranked
+        )
+        permalink_items = [item for item in ranked if item.chunk_id.startswith("permalink:")]
+        assert len(permalink_items) == 1
+        assert permalink_items[0].chunk_id == "permalink:63"
+
+    def test_valid_distinct_evidence_is_preserved(self) -> None:
+        claim = preprocess_claim("Cas9 RNA DNA cleavage")
+        chunks = [
+            _chunk("c1", "Abstract", "Cas9 uses RNA guides for DNA cleavage.", 0),
+            _chunk("c2", "Results", "The endonuclease introduces double-stranded breaks.", 1),
+        ]
+
+        ranked = rank_evidence_for_claim(claim, chunks, min_relevance=0.0)
+
+        assert len(ranked) == 2
+        assert {item.chunk_id for item in ranked} == {"c1", "c2"}
 
     def test_missing_section_and_page_are_preserved(self) -> None:
         claim = preprocess_claim("accuracy improved")

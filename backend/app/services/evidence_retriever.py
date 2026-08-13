@@ -6,6 +6,7 @@ from app.config import EVIDENCE_MIN_RELEVANCE, EVIDENCE_TOP_K
 from app.schemas.evidence import EvidenceItem
 from app.schemas.paper import EvidenceChunk
 from app.utils.claim_preprocessor import ProcessedClaim, _extract_numbers, _normalize_claim_text
+from app.utils.evidence_text import normalize_evidence_text
 
 # Section weights influence ranking only — they do not determine correctness.
 SECTION_WEIGHTS: dict[str, float] = {
@@ -82,7 +83,7 @@ def rank_evidence_for_claim(
     if not filtered and ranked:
         return []
 
-    return filtered[:effective_top_k]
+    return dedupe_evidence_items(filtered[:effective_top_k])
 
 
 def _score_chunk(claim: ProcessedClaim, chunk: EvidenceChunk) -> EvidenceItem:
@@ -175,6 +176,29 @@ def _tokenize(normalized_text: str) -> list[str]:
             continue
         tokens.append(token)
     return tokens
+
+
+def dedupe_evidence_items(items: list[EvidenceItem]) -> list[EvidenceItem]:
+    """Remove duplicate evidence by normalized text, keeping the highest relevance score."""
+    best_by_text: dict[str, EvidenceItem] = {}
+    for item in items:
+        key = normalize_evidence_text(item.text)
+        if not key:
+            continue
+        existing = best_by_text.get(key)
+        if existing is None or item.relevance_score > existing.relevance_score:
+            best_by_text[key] = item
+
+    deduped: list[EvidenceItem] = []
+    seen_keys: set[str] = set()
+    for item in items:
+        key = normalize_evidence_text(item.text)
+        if not key or key in seen_keys:
+            continue
+        if best_by_text.get(key) is item:
+            deduped.append(item)
+            seen_keys.add(key)
+    return deduped
 
 
 def _dedupe_chunks(chunks: list[EvidenceChunk]) -> list[EvidenceChunk]:
