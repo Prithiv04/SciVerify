@@ -2,19 +2,7 @@ import axios from 'axios'
 import { env } from '@/lib/env'
 import type { VerificationApiErrorBody } from '@/types/backend-verification'
 
-function formatApiError(error: unknown): string {
-  if (!axios.isAxiosError<VerificationApiErrorBody>(error)) {
-    return error instanceof Error
-      ? error.message
-      : 'An unexpected error occurred'
-  }
-
-  if (!error.response) {
-    return 'Unable to connect to the SciVerify backend. Please make sure the backend server is running.'
-  }
-
-  const detail = error.response.data?.detail
-
+function formatDetail(detail: VerificationApiErrorBody['detail']): string | null {
   if (typeof detail === 'string' && detail.trim()) {
     return detail
   }
@@ -26,7 +14,47 @@ function formatApiError(error: unknown): string {
       .join(', ')
   }
 
-  return error.message || 'An unexpected error occurred'
+  return null
+}
+
+function formatApiError(error: unknown): string {
+  if (!axios.isAxiosError<VerificationApiErrorBody>(error)) {
+    return error instanceof Error
+      ? error.message
+      : 'An unexpected error occurred'
+  }
+
+  if (!error.response) {
+    return 'Unable to connect to the SciVerify backend. Please make sure the backend server is running.'
+  }
+
+  const status = error.response.status
+  const detail = formatDetail(error.response.data?.detail)
+
+  if (status === 422) {
+    return detail ?? 'Please provide a valid claim and DOI.'
+  }
+
+  if (status === 429) {
+    return 'The AI verification service is temporarily rate limited. Please try again later.'
+  }
+
+  if (status === 404) {
+    return detail ?? 'The cited paper could not be found.'
+  }
+
+  if (status === 503) {
+    if (detail?.toLowerCase().includes('full text')) {
+      return 'Full text could not be retrieved from the available sources. Please try another paper.'
+    }
+    return detail ?? "The cited paper's full text could not be retrieved."
+  }
+
+  if (status >= 500) {
+    return detail ?? 'The verification service encountered an unexpected error. Please try again later.'
+  }
+
+  return detail ?? error.message ?? 'An unexpected error occurred'
 }
 
 export const apiClient = axios.create({

@@ -7,13 +7,17 @@ import { Panel } from '@/components/ui/Card'
 import type { SuggestedCorrection } from '@/types/verification'
 
 export interface SuggestedCorrectionPanelProps {
-  correction: SuggestedCorrection
+  correction: SuggestedCorrection | null | undefined
 }
 
 export function SuggestedCorrectionPanel({
   correction,
 }: SuggestedCorrectionPanelProps) {
   const [copied, setCopied] = useState(false)
+
+  if (!correction) {
+    return null
+  }
 
   const handleCopy = async () => {
     try {

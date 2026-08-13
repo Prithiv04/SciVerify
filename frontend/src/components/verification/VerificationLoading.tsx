@@ -71,11 +71,8 @@ export function VerificationLoading({
   message,
   indeterminate = false,
 }: VerificationLoadingProps) {
-  const pipelineStages = VERIFICATION_STAGES.filter(
-    (stage) => stage.group === 'pipeline',
-  )
   const currentStage = VERIFICATION_STAGES[stageIndex]
-  const activePipelineIndex = indeterminate ? 0 : stageIndex
+  const activeStageIndex = indeterminate ? 0 : stageIndex
 
   return (
     <div className="space-y-6">
@@ -84,21 +81,18 @@ export function VerificationLoading({
           Verifying citation
         </p>
         <p className="text-sm text-text-secondary">
-          {message ?? currentStage?.title ?? 'Processing verification pipeline...'}
+          {message ?? currentStage?.activeMessage ?? currentStage?.title ?? 'Processing verification pipeline...'}
         </p>
       </Panel>
 
       <Panel padding="md" className="space-y-1">
-        {pipelineStages.map((stage, index) => {
-          const stagePosition = VERIFICATION_STAGES.findIndex(
-            (item) => item.id === stage.id,
-          )
+        {VERIFICATION_STAGES.map((stage, index) => {
           let status: 'pending' | 'active' | 'completed' = 'pending'
           if (indeterminate) {
             status = index === 0 ? 'active' : 'pending'
-          } else if (activePipelineIndex > stagePosition) {
+          } else if (activeStageIndex > index) {
             status = 'completed'
-          } else if (activePipelineIndex === stagePosition) {
+          } else if (activeStageIndex === index) {
             status = 'active'
           }
 
@@ -113,7 +107,7 @@ export function VerificationLoading({
                   : undefined
               }
               status={status}
-              isLast={index === pipelineStages.length - 1}
+              isLast={index === VERIFICATION_STAGES.length - 1}
             />
           )
         })}
@@ -172,12 +166,12 @@ export function VerificationLoading({
           name={agentMeta.adjudicator.name}
           role={agentMeta.adjudicator.role}
           icon={agentMeta.adjudicator.icon}
-            status={indeterminate ? 'idle' : getAgentStatus('adjudicator', stageIndex)}
-            description={
-              indeterminate
-                ? 'Waiting for backend analysis...'
-                : getAgentDescription('adjudicator', stageIndex, message)
-            }
+          status={indeterminate ? 'idle' : getAgentStatus('adjudicator', stageIndex)}
+          description={
+            indeterminate
+              ? 'Waiting for backend analysis...'
+              : getAgentDescription('adjudicator', stageIndex, message)
+          }
           className={cn(
             getAgentStatus('adjudicator', stageIndex) === 'running' &&
               'ring-1 ring-primary/40',
@@ -191,7 +185,7 @@ export function VerificationLoading({
         </Panel>
       ) : stageIndex >= VERIFICATION_STAGES.length - 1 ? (
         <Panel padding="md" className="text-sm text-text-secondary">
-          Generating final verdict...
+          Finalizing validated verdict...
         </Panel>
       ) : null}
     </div>

@@ -69,6 +69,8 @@ export interface BackendVerificationResponse {
   defender?: BackendAgentAnalysis | null
   adjudicator?: BackendAdjudicatorAnalysis | null
   suggested_correction?: string | null
+  agent_agreement?: boolean | null
+  validation_warnings?: string[] | null
   detail?: string | null
 }
 

@@ -1,6 +1,8 @@
 import type { VerdictKey } from '@/constants/verdicts'
 import type {
   AgentAnalysis,
+  AgentDetail,
+  AdjudicatorDetail,
   EvidenceFactor,
   EvidenceItem,
   EvidenceStrength,
@@ -25,11 +27,19 @@ function emptyAgent(role: string): AgentAnalysis {
   }
 }
 
-function emptyCorrection(claim: string): SuggestedCorrection {
+function emptyAgentDetail(): AgentDetail {
   return {
-    originalClaim: claim,
-    problem: 'No correction was suggested.',
-    suggestedWording: claim,
+    analysis: 'Analysis unavailable.',
+    keyPoints: [],
+    supportingEvidence: [],
+    contradictingEvidence: [],
+  }
+}
+
+function emptyAdjudicatorDetail(): AdjudicatorDetail {
+  return {
+    ...emptyAgentDetail(),
+    reasoning: 'No adjudicator output was returned for this verification.',
   }
 }
 
@@ -59,6 +69,21 @@ function mapAgent(
   }
 }
 
+function mapAgentDetail(
+  agent: BackendAgentAnalysis | null | undefined,
+): AgentDetail | undefined {
+  if (!agent) return undefined
+
+  return {
+    analysis: agent.analysis,
+    stance: agent.stance,
+    confidence: toConfidencePercent(agent.confidence),
+    keyPoints: agent.key_points?.filter(Boolean) ?? [],
+    supportingEvidence: agent.supporting_evidence ?? [],
+    contradictingEvidence: agent.contradicting_evidence ?? [],
+  }
+}
+
 function mapAdjudicator(
   agent: BackendAdjudicatorAnalysis | null | undefined,
 ): AgentAnalysis {
@@ -69,6 +94,24 @@ function mapAdjudicator(
     summary: agent.analysis,
     finding: agent.reasoning,
     status: 'completed',
+  }
+}
+
+function mapAdjudicatorDetail(
+  agent: BackendAdjudicatorAnalysis | null | undefined,
+): AdjudicatorDetail | undefined {
+  if (!agent) return undefined
+
+  return {
+    analysis: agent.analysis,
+    stance: undefined,
+    confidence: toConfidencePercent(agent.confidence),
+    keyPoints: [],
+    supportingEvidence: agent.supporting_evidence ?? [],
+    contradictingEvidence: agent.contradicting_evidence ?? [],
+    verdict: agent.verdict,
+    reasoning: agent.reasoning,
+    suggestedCorrection: agent.suggested_correction ?? null,
   }
 }
 
@@ -93,10 +136,14 @@ function mapEvidenceItem(
         ? `Claim numbers: ${item.claim_numbers?.join(', ') || 'none'}. Evidence numbers: ${item.evidence_numbers?.join(', ') || 'none'}.`
         : undefined,
     relevance: Math.round(item.relevance_score * 100),
+    claimOverlap: Math.round(item.claim_overlap * 100),
+    numericOverlap: Math.round(item.numeric_overlap * 100),
     strength: evidenceStrength(item.relevance_score),
     evidenceType: item.section,
     identifier: paper.doi,
     sourceUrl: item.source_url ?? undefined,
+    page: item.page ?? null,
+    chunkIndex: item.chunk_index,
     verdict,
   }
 }
@@ -117,14 +164,14 @@ function buildEvidenceFactors(response: BackendVerificationResponse): EvidenceFa
 function mapSuggestedCorrection(
   response: BackendVerificationResponse,
   claim: string,
-): SuggestedCorrection {
+): SuggestedCorrection | null {
   const suggested =
     response.suggested_correction ??
     response.adjudicator?.suggested_correction ??
     null
 
-  if (!suggested) {
-    return emptyCorrection(claim)
+  if (!suggested?.trim()) {
+    return null
   }
 
   return {
@@ -169,10 +216,17 @@ export function mapBackendVerificationToResult(
     confidence,
     summary,
     reasoning,
+    paperTitle: response.paper.title ?? undefined,
+    paperDoi: response.paper.doi,
+    agentAgreement: response.agent_agreement ?? null,
+    validationWarnings: response.validation_warnings?.filter(Boolean) ?? [],
     evidenceFactors: buildEvidenceFactors(response),
     prosecutor: mapAgent(response.prosecutor, 'Prosecutor'),
     defender: mapAgent(response.defender, 'Defender'),
     adjudicator: mapAdjudicator(response.adjudicator),
+    prosecutorDetail: mapAgentDetail(response.prosecutor),
+    defenderDetail: mapAgentDetail(response.defender),
+    adjudicatorDetail: mapAdjudicatorDetail(response.adjudicator),
     evidence: (response.evidence ?? []).map((item) =>
       mapEvidenceItem(item, response.paper, verdict),
     ),
@@ -201,14 +255,21 @@ export function mapInsufficientEvidenceResult(
       response.reasoning ??
       response.detail ??
       'Evidence retrieval did not produce usable chunks for verification.',
+    paperTitle: response.paper.title ?? undefined,
+    paperDoi: response.paper.doi,
+    agentAgreement: null,
+    validationWarnings: [],
     evidenceFactors: [],
     prosecutor: emptyAgent('Prosecutor'),
     defender: emptyAgent('Defender'),
     adjudicator: emptyAgent('Adjudicator'),
+    prosecutorDetail: emptyAgentDetail(),
+    defenderDetail: emptyAgentDetail(),
+    adjudicatorDetail: emptyAdjudicatorDetail(),
     evidence: (response.evidence ?? []).map((item) =>
       mapEvidenceItem(item, response.paper, 'INSUFFICIENT'),
     ),
-    suggestedCorrection: emptyCorrection(response.claim),
+    suggestedCorrection: null,
     createdAt: new Date().toISOString(),
   }
 }

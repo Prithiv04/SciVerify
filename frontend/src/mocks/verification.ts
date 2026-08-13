@@ -11,26 +11,29 @@ const daysAgo = (days: number) =>
 
 export const VERIFICATION_STAGES: VerificationStage[] = [
   {
-    id: 'citation-identified',
-    title: 'Citation identified',
+    id: 'finding-paper',
+    title: 'Finding paper',
     group: 'pipeline',
+    activeMessage: 'Resolving DOI and locating the cited paper...',
   },
   {
-    id: 'paper-checked',
-    title: 'Paper existence checked',
+    id: 'retrieving-full-text',
+    title: 'Retrieving full text',
     group: 'pipeline',
+    activeMessage: 'Downloading and validating the full-text source...',
   },
   {
-    id: 'evidence-retrieved',
-    title: 'Evidence retrieved',
+    id: 'extracting-evidence',
+    title: 'Extracting evidence',
     group: 'pipeline',
+    activeMessage: 'Parsing, chunking, and ranking relevant evidence...',
   },
   {
     id: 'prosecutor',
     title: 'Prosecutor analysis',
     group: 'agent',
     agent: 'prosecutor',
-    activeMessage: 'Searching for contradictions...',
+    activeMessage: 'Searching for contradictions and limitations...',
   },
   {
     id: 'defender',
@@ -41,16 +44,16 @@ export const VERIFICATION_STAGES: VerificationStage[] = [
   },
   {
     id: 'adjudicator',
-    title: 'Adjudicator decision',
+    title: 'Adjudication',
     group: 'agent',
     agent: 'adjudicator',
     activeMessage: 'Weighing arguments against evidence...',
   },
   {
-    id: 'report',
-    title: 'Final report generated',
+    id: 'validating-result',
+    title: 'Validating result',
     group: 'pipeline',
-    activeMessage: 'Generating final verdict...',
+    activeMessage: 'Checking verdict consistency and calibrating confidence...',
   },
 ]
 
@@ -502,10 +505,12 @@ export function buildMockVerificationResult(
     citation: input.citation,
     sourceType: input.sourceType,
     context: input.context?.trim() || undefined,
-    suggestedCorrection: {
-      ...template.suggestedCorrection,
-      originalClaim: input.claim,
-    },
+    suggestedCorrection: template.suggestedCorrection
+      ? {
+          ...template.suggestedCorrection,
+          originalClaim: input.claim,
+        }
+      : null,
     createdAt: new Date().toISOString(),
   }
 }

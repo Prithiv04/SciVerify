@@ -6,6 +6,21 @@ export type CitationStatus = 'verified' | 'fabricated' | 'unverified'
 
 export type EvidenceStrength = 'HIGH' | 'MEDIUM' | 'LOW'
 
+export interface AgentDetail {
+  analysis: string
+  stance?: string
+  confidence?: number
+  keyPoints: string[]
+  supportingEvidence: string[]
+  contradictingEvidence: string[]
+}
+
+export interface AdjudicatorDetail extends AgentDetail {
+  verdict?: VerdictKey
+  reasoning?: string
+  suggestedCorrection?: string | null
+}
+
 export interface AgentAnalysis {
   role: string
   summary: string
@@ -22,10 +37,14 @@ export interface EvidenceItem {
   excerpt: string
   whyItMatters?: string
   relevance: number
+  claimOverlap?: number
+  numericOverlap?: number
   strength?: EvidenceStrength
   evidenceType: string
   identifier?: string
   sourceUrl?: string
+  page?: number | null
+  chunkIndex?: number
   verdict?: VerdictKey
 }
 
@@ -51,12 +70,19 @@ export interface VerificationResult {
   confidence: number
   summary: string
   reasoning: string
+  paperTitle?: string
+  paperDoi?: string
+  agentAgreement?: boolean | null
+  validationWarnings?: string[]
   evidenceFactors: EvidenceFactor[]
   prosecutor: AgentAnalysis
   defender: AgentAnalysis
   adjudicator: AgentAnalysis
+  prosecutorDetail?: AgentDetail
+  defenderDetail?: AgentDetail
+  adjudicatorDetail?: AdjudicatorDetail
   evidence: EvidenceItem[]
-  suggestedCorrection: SuggestedCorrection
+  suggestedCorrection?: SuggestedCorrection | null
   createdAt: string
 }
 

@@ -40,34 +40,52 @@ function parseApiError(error: unknown): VerificationServiceError {
 
     const status = error.response.status
     const detail = error.response.data?.detail
+    const detailText =
+      typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item) => item.msg).filter(Boolean).join(', ')
+          : undefined
+
+    if (status === 422) {
+      return new VerificationServiceError(
+        detailText ?? 'Please provide a valid claim and DOI.',
+        status,
+      )
+    }
+
+    if (status === 429) {
+      return new VerificationServiceError(
+        'The AI verification service is temporarily rate limited. Please try again later.',
+        status,
+      )
+    }
 
     if (status === 400) {
-      const message =
-        typeof detail === 'string'
-          ? detail
-          : 'Please provide a valid DOI and claim.'
+      const message = detailText ?? 'Please provide a valid DOI and claim.'
       return new VerificationServiceError(message, status)
     }
 
     if (status === 404) {
       return new VerificationServiceError(
-        'The cited paper could not be found.',
+        detailText ?? 'The cited paper could not be found.',
         status,
       )
     }
 
     if (status === 503) {
+      if (detailText?.toLowerCase().includes('full text')) {
+        return new VerificationServiceError(
+          'Full text could not be retrieved from the available sources. Please try another paper.',
+          status,
+        )
+      }
       const message =
-        typeof detail === 'string'
-          ? detail
-          : "The cited paper's full text could not be retrieved."
+        detailText ?? "The cited paper's full text could not be retrieved."
       return new VerificationServiceError(message, status)
     }
 
-    const fallback =
-      typeof detail === 'string'
-        ? detail
-        : 'Verification could not be completed.'
+    const fallback = detailText ?? 'Verification could not be completed.'
     return new VerificationServiceError(fallback, status)
   }
 
@@ -97,7 +115,7 @@ function handleApplicationStatus(
   if (response.status === 'llm_unavailable') {
     throw new VerificationServiceError(
       response.detail ??
-        'AI verification is currently unavailable. Configure the backend LLM provider and try again.',
+        'The AI verification service is temporarily unavailable. Please try again later.',
     )
   }
 
