@@ -1,516 +1,761 @@
-You are implementing Phase 6 — Milestone 4 of the SciVerify project.
+# SciVerify Phase 6 — Milestone 5: Multi-Agent Verification Layer
 
-IMPORTANT:
-- First inspect the existing repository and understand the architecture from Milestones 1–3.
-- Do NOT modify the frontend.
-- Do NOT implement the Prosecutor, Defender, or Adjudicator agents yet.
-- Do NOT add an LLM API or vector database yet.
-- Reuse the existing paper retrieval and evidence chunking infrastructure.
-- Keep the implementation modular, deterministic, testable, and production-oriented.
-- Do NOT break any existing functionality.
+Implement **Phase 6 — Milestone 5** for the existing SciVerify repository.
 
-==================================================
-MILESTONE 4 — EVIDENCE RETRIEVAL & RANKING
-==================================================
+## Objective
 
-Goal:
+Build the backend multi-agent verification layer that transforms the existing pipeline:
 
-Build the backend evidence retrieval layer that takes:
+DOI → Citation Resolution → Paper Retrieval → Evidence Retrieval & Ranking
 
-1. A scientific claim
-2. A paper DOI / paper identifier
+into:
 
-and retrieves the most relevant evidence chunks from the paper produced by Milestone 3.
+DOI → Citation Resolution → Paper Retrieval → Evidence Retrieval → **Prosecutor → Defender → Adjudicator → Final Verification Result**
 
-The pipeline should become:
+This milestone must initially be **backend-only**.
 
-Claim
-  ↓
-Citation Resolver              [DONE]
-  ↓
-Paper Retrieval                [DONE]
-  ↓
-Sections + Evidence Chunks     [DONE]
-  ↓
-Evidence Retrieval & Ranking   [IMPLEMENT NOW]
-  ↓
-Multi-Agent Verification       [LATER]
+**Do NOT modify the frontend.**
 
-==================================================
-STEP 1 — INSPECT EXISTING CODE
-==================================================
+The existing frontend mock verification flow must continue working exactly as it does now.
+
+---
+
+# 1. Inspect the existing repository first
 
 Before writing code, inspect:
 
-- backend/app/
-- backend/app/services/
-- backend/app/schemas/
-- backend/app/api/routes/
-- backend/app/tests/
-- existing paper retrieval implementation
-- evidence_chunker.py
-- citation resolver
-- configuration
-- existing API conventions
-- existing error handling
-- README documentation
+* `backend/app/`
+* Existing schemas
+* Citation resolver
+* Paper retriever
+* Evidence retriever
+* Existing `VerificationResult` frontend type
+* Existing mock verification service
+* Existing API client
+* Existing configuration
+* Existing tests
+* `backend/README.md`
 
-Understand the existing:
+Reuse existing abstractions wherever appropriate.
 
-- Paper model/schema
-- Evidence chunk structure
-- DOI normalization
-- Paper retrieval flow
-- API response patterns
-- Test conventions
+Do not duplicate DOI resolution, paper retrieval, or evidence-ranking logic.
 
-Do not duplicate existing functionality.
+---
 
-==================================================
-STEP 2 — CLAIM PREPROCESSING
-==================================================
+# 2. Architecture
 
-Create a small reusable claim preprocessing utility/service.
+The verification pipeline must be:
 
-Input:
+```text
+POST /api/verification/analyze
+        ↓
+Validate claim + DOI
+        ↓
+Citation Resolver
+        ↓
+Paper Retrieval
+        ↓
+Evidence Retrieval & Ranking
+        ↓
+┌───────────────────────────────┐
+│      Multi-Agent Layer        │
+│                               │
+│  Prosecutor                   │
+│       ↓                       │
+│  Defender                     │
+│       ↓                       │
+│  Adjudicator                  │
+└───────────────────────────────┘
+        ↓
+Final Verification Result
+```
 
-"The method improves accuracy by 40% on real-world software development tasks."
+The agents should operate on the retrieved evidence rather than independently downloading papers.
 
-Output should contain normalized information useful for retrieval.
+---
 
-At minimum:
+# 3. Agent 1 — Prosecutor
 
-- original claim
-- normalized claim
-- meaningful tokens/terms
+Create a dedicated prosecutor service.
 
-Requirements:
+Purpose:
 
-- preserve the original claim
-- lowercase only for matching purposes
-- remove unnecessary punctuation
-- normalize whitespace
-- do not alter scientific meaning
-- do not perform aggressive stemming that could damage scientific terms
-- keep implementation deterministic
+> Attempt to disprove, weaken, or challenge the scientific claim using the retrieved evidence.
 
-Example:
+The Prosecutor should analyze:
 
-original:
-"The method improves accuracy by 40%."
+* Contradictory evidence
+* Numerical mismatches
+* Unsupported conclusions
+* Overstated claims
+* Missing conditions
+* Scope limitations
+* Population/sample mismatches
+* Methodological limitations
+* Evidence that only partially supports the claim
 
-normalized:
-"method improves accuracy 40%"
+Return a structured result.
 
-==================================================
-STEP 3 — EVIDENCE RETRIEVAL
-==================================================
+Suggested fields:
 
-Create:
-
-backend/app/services/evidence_retriever.py
-
-The service should:
-
-1. Accept a claim.
-2. Accept paper chunks from Milestone 3.
-3. Compare the claim against every chunk.
-4. Calculate a deterministic relevance score.
-5. Rank chunks from most relevant to least relevant.
-6. Return the top relevant evidence.
-
-For the first implementation, use a lightweight deterministic ranking strategy.
-
-DO NOT introduce embeddings, OpenAI, Gemini, LangChain, vector databases, or external AI APIs yet.
-
-The scoring can consider:
-
-- token overlap
-- meaningful keyword overlap
-- phrase overlap
-- numeric/value overlap
-- section importance
-- exact phrase matches
-
-Use a transparent scoring approach so the result can be explained and tested.
-
-==================================================
-STEP 4 — NUMERIC CLAIM HANDLING
-==================================================
-
-Scientific claims often contain numbers.
-
-For example:
-
-Claim:
-"The method improves accuracy by 40%."
-
-Evidence:
-"The proposed method improves accuracy by 12%."
-
-The retrieval system should recognize that both discuss accuracy/improvement, while preserving the different numeric value.
-
-Expose useful metadata such as:
-
-- claim_numbers
-- evidence_numbers
-- numeric_overlap
-
-Do NOT make the final SUPPORTS/CONTRADICTS decision here.
-
-That decision belongs to the future Adjudicator agent.
-
-==================================================
-STEP 5 — SECTION AWARENESS
-==================================================
-
-Use the existing chunk section information.
-
-Give reasonable ranking preference to sections such as:
-
-- Results
-- Findings
-- Experiments
-- Methods
-- Abstract
-- Discussion
-- Conclusion
-
-Do NOT blindly assume that Results is always correct.
-
-Section weighting should only influence relevance ranking.
-
-Preserve:
-
-- section
-- chunk_id
-- chunk_index
-- source_url
-- page if available
-- existing metadata
-
-==================================================
-STEP 6 — EVIDENCE SCORE
-==================================================
-
-Each retrieved evidence item should expose a normalized relevance score.
-
-Example:
-
-{
-  "chunk_id": "chunk-12",
-  "section": "Results",
-  "text": "...",
-  "relevance_score": 0.92,
-  "claim_overlap": 0.75,
-  "numeric_overlap": 1.0,
-  "source_url": "...",
-  "page": 4
-}
-
-The exact scoring formula is up to you, but it must be:
-
-- deterministic
-- bounded between 0 and 1
-- documented
-- unit tested
-
-Avoid pretending that this score is an AI confidence score.
-
-Call it something like:
-
-relevance_score
-
-not:
-
+```text
+agent
+analysis
+stance
+key_points
+supporting_evidence
+contradicting_evidence
 confidence
+```
 
-==================================================
-STEP 7 — API
-==================================================
+The Prosecutor must **not invent evidence**.
 
-Create:
+Every evidence reference must correspond to an actual retrieved evidence chunk.
 
-backend/app/api/routes/evidence.py
+---
 
-Add:
+# 4. Agent 2 — Defender
 
-POST /api/evidence/retrieve
+Create a dedicated defender service.
 
-Request:
+Purpose:
 
-{
-  "claim": "The method improves accuracy by 40%.",
-  "doi": "10.xxxx/xxxxx"
-}
-
-The endpoint should:
-
-1. Validate the claim.
-2. Resolve/retrieve the paper using the existing services.
-3. Obtain the paper's evidence chunks.
-4. Rank the chunks against the claim.
-5. Return the highest-ranked evidence.
-
-Do not duplicate DOI resolution logic.
-
-Reuse existing services.
-
-==================================================
-STEP 8 — RESPONSE SCHEMA
-==================================================
-
-Create appropriate schemas under:
-
-backend/app/schemas/
-
-For example:
-
-EvidenceRetrievalRequest
-EvidenceItem
-EvidenceRetrievalResponse
-
-Response structure should be similar to:
+> Build the strongest evidence-based case that the claim is supported by the cited paper.
 
-{
-  "status": "success",
-  "claim": "The method improves accuracy by 40%.",
-  "paper": {
-    "paper_id": "...",
-    "doi": "...",
-    "title": "..."
-  },
-  "evidence": [
-    {
-      "chunk_id": "chunk-12",
-      "section": "Results",
-      "chunk_index": 3,
-      "text": "...",
-      "relevance_score": 0.92,
-      "claim_overlap": 0.75,
-      "numeric_overlap": 1.0,
-      "source_url": "...",
-      "page": 4
-    }
-  ],
-  "total_chunks_considered": 25
-}
+Analyze:
 
-Keep the response compatible with the existing architecture and future agent pipeline.
+* Direct supporting statements
+* Matching numerical values
+* Relevant Results/Methods evidence
+* Experimental findings
+* Appropriate context
+* Conditions under which the claim is valid
+* Strength and relevance of supporting evidence
 
-==================================================
-STEP 9 — EDGE CASES
-==================================================
+Return the same general structured contract where practical.
 
-Handle these properly:
+The Defender must also **never invent evidence**.
 
-1. Empty claim
-2. Claim that is too long
-3. Invalid DOI
-4. DOI not found
-5. Paper metadata available but full text unavailable
-6. Paper has no chunks
-7. No relevant evidence
-8. Duplicate chunks
-9. Missing section
-10. Missing page
-11. Missing source URL
-12. Numeric claim with no numeric evidence
-13. Evidence with numbers that differ from claim
+All evidence references must map to retrieved evidence chunks.
 
-Use appropriate HTTP status codes consistent with Milestones 1–3.
+---
 
-Do not return HTTP 500 for expected user/input/document conditions.
+# 5. Agent 3 — Adjudicator
 
-==================================================
-STEP 10 — TESTS
-==================================================
+Create a dedicated adjudicator service.
 
-Create comprehensive automated tests.
+Purpose:
 
-At minimum test:
+> Evaluate the original claim, retrieved evidence, Prosecutor analysis, and Defender analysis and produce the final verdict.
 
-### Claim preprocessing
-- normalization
-- whitespace
-- punctuation
-- empty claim
-- numeric extraction
+The Adjudicator must consider both sides rather than simply selecting whichever agent sounds more confident.
 
-### Ranking
-- exact phrase match ranks highly
-- keyword overlap
-- irrelevant chunk ranks low
-- numeric overlap
-- different numeric values remain distinguishable
-- section weighting
-- deterministic ordering
-- score is between 0 and 1
+Supported verdicts must match the existing SciVerify frontend contract:
 
-### API
-- successful retrieval
-- invalid DOI
-- missing paper
-- no full text
-- no chunks
-- empty claim
-- successful response schema
-
-Mock external HTTP calls.
-
-Do NOT depend on Crossref/OpenAlex/Nature being available during tests.
-
-Preserve all existing tests.
-
-==================================================
-STEP 11 — PERFORMANCE
-==================================================
-
-Keep the first implementation simple.
-
-Expected scale:
-
-- tens to hundreds of chunks per paper
-
-Do not prematurely introduce:
-
-- vector databases
-- embeddings
-- Redis
-- Elasticsearch
-- LLM calls
-
-A deterministic ranking implementation is sufficient for this milestone.
-
-Structure the service so an embedding-based retriever can be added later without rewriting the API.
-
-==================================================
-STEP 12 — ROUTER REGISTRATION
-==================================================
-
-Register the new evidence router in:
-
-backend/app/main.py
-
-Follow the same pattern used by:
-
-- citations router
-- papers router
-
-==================================================
-STEP 13 — DOCUMENTATION
-==================================================
-
-Update:
-
-backend/README.md
-
-Document:
-
-- Milestone 4
-- evidence retrieval flow
-- scoring approach
-- API endpoint
-- request example
-- response example
-- limitations
-
-Clearly state:
-
-"This milestone performs deterministic evidence retrieval and ranking. It does not produce the final scientific verdict."
-
-==================================================
-STEP 14 — VALIDATION
-==================================================
-
-After implementation run:
-
-Backend:
-
-python -m pytest
-
-Frontend:
-
-cd frontend
-npm run lint
-npm run build
-
-Also manually test:
-
-POST /api/evidence/retrieve
-
-using a known DOI and claim.
-
-Verify:
-
-- API starts correctly
-- existing health endpoint works
-- citation resolver still works
-- paper retrieval still works
-- evidence retrieval returns ranked chunks
-- existing tests remain green
-- no frontend functionality is broken
-
-==================================================
-IMPORTANT ARCHITECTURE RULE
-==================================================
-
-DO NOT implement the three verification agents in this milestone.
-
-The future architecture is:
-
-Evidence Retrieval
-        ↓
-┌─────────────────────────┐
-│ Prosecutor              │
-│ Challenges the claim    │
-└─────────────────────────┘
-        ↓
-┌─────────────────────────┐
-│ Defender                │
-│ Builds supporting case  │
-└─────────────────────────┘
-        ↓
-┌─────────────────────────┐
-│ Adjudicator             │
-│ Final evidence verdict  │
-└─────────────────────────┘
-
-Milestone 4 only produces:
-
-"Here are the most relevant pieces of evidence for this claim."
-
-It must NOT produce:
-
+```text
 SUPPORTS
 OVERSTATED
 CONTRADICTS
 INSUFFICIENT
 FABRICATED
+```
 
-Those verdicts belong to the later multi-agent verification layer.
+The result should include:
 
-==================================================
-FINAL DELIVERABLE
-==================================================
+```text
+verdict
+confidence
+summary
+reasoning
+supporting_evidence
+contradicting_evidence
+suggested_correction
+```
 
-At the end, provide a concise implementation report containing:
+The adjudicator must distinguish:
+
+### SUPPORTS
+
+The cited evidence directly supports the claim with appropriate context.
+
+### OVERSTATED
+
+The evidence supports part of the claim, but the claim exaggerates magnitude, certainty, scope, or conclusion.
+
+### CONTRADICTS
+
+The available evidence directly conflicts with the claim.
+
+### INSUFFICIENT
+
+There is not enough evidence to determine whether the claim is supported or contradicted.
+
+### FABRICATED
+
+The claimed result/content cannot be substantiated from the cited source or the citation/evidence relationship is fundamentally invalid.
+
+Do not use `FABRICATED` simply because evidence retrieval failed.
+
+---
+
+# 6. LLM abstraction
+
+Do not hard-code an LLM provider throughout the application.
+
+Create a provider abstraction such as:
+
+```text
+LLMProvider
+```
+
+with a method similar to:
+
+```text
+generate(...)
+```
+
+The agent services should depend on this abstraction.
+
+Allow the implementation to support an LLM provider through environment configuration.
+
+Use environment variables for provider configuration.
+
+For example:
+
+```text
+LLM_PROVIDER=
+LLM_API_KEY=
+LLM_MODEL=
+LLM_BASE_URL=
+```
+
+Do not commit real API keys.
+
+Update:
+
+```text
+backend/.env.example
+```
+
+with placeholders only.
+
+---
+
+# 7. Deterministic fallback
+
+The architecture must not make the entire backend unusable when an LLM API key is missing.
+
+Implement a safe development/test mode.
+
+If the configured LLM provider is unavailable, return a controlled application-level result rather than crashing.
+
+Do not fabricate a successful scientific verdict just because the LLM is unavailable.
+
+A safe response should clearly indicate that verification could not be completed.
+
+---
+
+# 8. Evidence grounding
+
+This is critical.
+
+The agents must receive only the evidence returned by:
+
+```text
+POST /api/evidence/retrieve
+```
+
+Each evidence item should retain:
+
+* `chunk_id`
+* `section`
+* `chunk_index`
+* `text`
+* `relevance_score`
+* `source_url`
+* `page`
+* numeric overlap information
+
+The agent prompt must explicitly instruct:
+
+> Use only the supplied evidence. Do not invent papers, quotes, numbers, citations, or experimental results.
+
+Agent outputs should reference evidence using `chunk_id`.
+
+Validate returned evidence references against the actual retrieved chunks.
+
+Ignore or reject hallucinated chunk IDs.
+
+---
+
+# 9. Structured agent outputs
+
+Do not rely on free-form LLM responses if structured output can be enforced.
+
+Create Pydantic schemas for:
+
+```text
+ProsecutorAnalysis
+DefenderAnalysis
+AdjudicatorAnalysis
+VerificationResponse
+```
+
+Keep the schemas strongly typed and easy for the frontend to consume later.
+
+---
+
+# 10. Verification API
+
+Create:
+
+```text
+POST /api/verification/analyze
+```
+
+Request:
+
+```json
+{
+  "claim": "The method improves accuracy by 40%.",
+  "doi": "10.xxxx/xxxxx"
+}
+```
+
+The endpoint should execute:
+
+```text
+resolve citation
+→ retrieve paper
+→ retrieve evidence
+→ prosecutor
+→ defender
+→ adjudicator
+→ final response
+```
+
+Do not duplicate logic from existing services.
+
+---
+
+# 11. Response contract
+
+The final response should be compatible with the existing frontend `VerificationResult` concept.
+
+Include information such as:
+
+```json
+{
+  "status": "success",
+  "claim": "...",
+  "verdict": "SUPPORTS",
+  "confidence": 0.91,
+  "summary": "...",
+  "reasoning": "...",
+
+  "paper": {
+    "paper_id": "...",
+    "doi": "...",
+    "title": "..."
+  },
+
+  "evidence": [],
+
+  "prosecutor": {
+    "stance": "...",
+    "analysis": "...",
+    "key_points": [],
+    "confidence": 0.0
+  },
+
+  "defender": {
+    "stance": "...",
+    "analysis": "...",
+    "key_points": [],
+    "confidence": 0.0
+  },
+
+  "adjudicator": {
+    "analysis": "...",
+    "confidence": 0.0
+  },
+
+  "suggested_correction": null
+}
+```
+
+Adapt the exact structure to the existing repository contracts rather than unnecessarily replacing them.
+
+---
+
+# 12. Error handling
+
+Handle each stage separately.
+
+Expected cases:
+
+### Invalid claim
+
+Return:
+
+```text
+400
+```
+
+### Invalid DOI
+
+Return:
+
+```text
+400
+```
+
+### Citation not found
+
+Return:
+
+```text
+404
+```
+
+### Paper unavailable
+
+Return an appropriate controlled response.
+
+### No full text
+
+Do not run the agents without evidence.
+
+Return a meaningful status such as:
+
+```text
+insufficient_evidence
+```
+
+### No relevant evidence
+
+Return:
+
+```text
+insufficient_evidence
+```
+
+### LLM provider failure
+
+Return a controlled service/application error.
+
+Never expose API keys or internal provider credentials.
+
+### Agent output validation failure
+
+Do not silently accept malformed or hallucinated agent output.
+
+Return a controlled error and log enough information for debugging without exposing secrets.
+
+---
+
+# 13. Agent execution strategy
+
+For the first implementation, prioritize correctness and traceability over performance.
+
+Use a clear sequence:
+
+```text
+Prosecutor
+   ↓
+Defender
+   ↓
+Adjudicator
+```
+
+The Adjudicator receives:
+
+* Original claim
+* Evidence
+* Prosecutor analysis
+* Defender analysis
+
+The Prosecutor and Defender should not receive each other's analysis.
+
+This keeps their perspectives independent.
+
+---
+
+# 14. Configuration
+
+Extend:
+
+```text
+backend/app/config.py
+```
+
+with appropriate LLM configuration.
+
+Do not hard-code:
+
+* API keys
+* model secrets
+* provider credentials
+* private URLs
+
+Update:
+
+```text
+backend/.env.example
+```
+
+with safe placeholders.
+
+---
+
+# 15. Tests
+
+This milestone must have comprehensive automated tests.
+
+Add tests for:
+
+### Agent tests
+
+* Prosecutor correctly receives claim + evidence
+* Defender correctly receives claim + evidence
+* Adjudicator receives both analyses
+* Evidence references are validated
+* Hallucinated chunk IDs are rejected
+* Structured output validation works
+
+### Verdict tests
+
+Test all five verdicts:
+
+```text
+SUPPORTS
+OVERSTATED
+CONTRADICTS
+INSUFFICIENT
+FABRICATED
+```
+
+### API tests
+
+Test:
+
+* Valid request
+* Invalid claim
+* Invalid DOI
+* Citation failure
+* Paper retrieval failure
+* No evidence
+* LLM unavailable
+* Malformed agent output
+* Successful end-to-end mocked verification
+
+All external LLM calls must be mocked.
+
+Do not make the automated test suite depend on a real LLM API key.
+
+---
+
+# 16. End-to-end mocked test
+
+Create at least one test covering:
+
+```text
+claim
+ ↓
+citation resolver mock
+ ↓
+paper retrieval mock
+ ↓
+evidence retrieval mock
+ ↓
+prosecutor mock
+ ↓
+defender mock
+ ↓
+adjudicator mock
+ ↓
+final VerificationResponse
+```
+
+Verify that:
+
+* The correct claim reaches every stage
+* Evidence reaches both agents
+* The Adjudicator receives both analyses
+* The final verdict is returned correctly
+* Evidence references are preserved
+* No frontend code is required
+
+---
+
+# 17. Logging
+
+Add useful backend logging for:
+
+```text
+verification_started
+citation_resolved
+paper_retrieved
+evidence_retrieved
+prosecutor_completed
+defender_completed
+adjudicator_completed
+verification_completed
+```
+
+Do not log:
+
+* API keys
+* Authorization headers
+* Secrets
+* Full sensitive provider responses unnecessarily
+
+---
+
+# 18. Frontend constraint
+
+Do **not** modify:
+
+* React components
+* Dashboard
+* VerifyPage
+* Zustand stores
+* Mock verification service
+* Existing UI
+
+The frontend should continue using the mock verification flow after Milestone 5.
+
+Frontend integration will be handled in a later milestone.
+
+---
+
+# 19. Backward compatibility
+
+Do not break:
+
+```text
+GET /api/health
+POST /api/citations/resolve
+POST /api/papers/retrieve
+POST /api/evidence/retrieve
+```
+
+All existing tests must continue passing.
+
+---
+
+# 20. Documentation
+
+Update:
+
+```text
+backend/README.md
+```
+
+with:
+
+* Milestone 5 architecture
+* Agent responsibilities
+* Verification endpoint
+* Request/response example
+* Environment variables
+* How to run
+* How to test
+* LLM provider configuration
+* Limitations
+
+Do not document fake capabilities.
+
+---
+
+# 21. Validation requirements
+
+Before declaring Milestone 5 complete, run:
+
+```powershell
+cd backend
+.venv\Scripts\Activate.ps1
+python -m pytest
+```
+
+Then:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+All existing and new backend tests must pass.
+
+The frontend must remain unchanged and continue to build successfully.
+
+---
+
+# 22. Important implementation constraints
+
+Do NOT:
+
+* Implement frontend integration
+* Replace the existing mock workflow
+* Add a vector database
+* Introduce unnecessary infrastructure
+* Hard-code an API key
+* Bypass citation/paper/evidence services
+* Invent evidence
+* Allow agents to cite nonexistent chunks
+* Treat LLM confidence as scientific truth
+* Claim verification succeeded when evidence is unavailable
+
+Keep the implementation modular so that the next milestone can easily connect the real frontend to:
+
+```text
+POST /api/verification/analyze
+```
+
+---
+
+# 23. Completion criteria
+
+Milestone 5 is complete only when:
+
+* [ ] Prosecutor service implemented
+* [ ] Defender service implemented
+* [ ] Adjudicator service implemented
+* [ ] LLM provider abstraction implemented
+* [ ] Structured Pydantic agent schemas implemented
+* [ ] Evidence grounding implemented
+* [ ] Evidence-reference validation implemented
+* [ ] `POST /api/verification/analyze` implemented
+* [ ] All five verdicts supported
+* [ ] Error handling implemented
+* [ ] LLM calls mocked in tests
+* [ ] End-to-end mocked verification test passes
+* [ ] Existing Milestone 1–4 tests still pass
+* [ ] Backend README updated
+* [ ] `.env.example` contains placeholders only
+* [ ] Frontend files remain unchanged
+* [ ] `npm run lint` passes
+* [ ] `npm run build` passes
+
+## Final instruction
+
+First inspect the existing codebase and architecture.
+
+Then implement **Milestone 5 only**.
+
+Do not move on to frontend integration or any later milestone.
+
+After implementation, provide a concise report containing:
 
 1. Files created
 2. Files modified
-3. API endpoint added
-4. Ranking methodology
-5. Response structure
-6. Edge cases handled
-7. Number of tests
-8. Test results
-9. Frontend lint result
-10. Frontend build result
-11. Manual API test result
-12. Known limitations
-13. Confirmation that NO frontend functionality was changed
-14. Confirmation that NO LLM/vector database was introduced
+3. API endpoint
+4. Agent responsibilities
+5. LLM provider abstraction
+6. Test count/results
+7. Frontend validation
+8. Any limitations
+9. Whether anything was committed or pushed
 
-DO NOT commit or push anything.
-
-Stop after Milestone 4 is fully implemented and validated.
+Do not commit or push anything automatically.

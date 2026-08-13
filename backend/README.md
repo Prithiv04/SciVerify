@@ -10,7 +10,8 @@ FastAPI backend for the SciVerify evidence-backed citation verification platform
 | 2 | Complete | DOI citation resolver (Crossref → OpenAlex) |
 | 3 | Complete | Paper metadata & content retrieval, evidence chunking |
 | 4 | Complete | Deterministic evidence retrieval & ranking |
-| 5+ | Planned | Multi-agent verification, persistence |
+| 5 | Complete | Multi-agent verification (Prosecutor, Defender, Adjudicator) |
+| 6+ | Planned | Frontend integration, persistence |
 
 ## Prerequisites
 
@@ -290,9 +291,89 @@ curl -X POST http://127.0.0.1:8001/api/evidence/retrieve \
 
 ### Limitations
 
-- Deterministic token/phrase matching — no embeddings or LLM ranking yet
-- Cannot produce SUPPORTS/OVERSTATED/CONTRADICTS verdicts (reserved for future agents)
+- Deterministic token/phrase matching — no embeddings yet
 - Requires Milestone 3 to produce chunks; metadata-only papers return empty evidence
+
+## Multi-agent verification (Milestone 5)
+
+`POST /api/verification/analyze` runs the full backend verification pipeline:
+
+```text
+claim + DOI → citation/paper/evidence pipeline → Prosecutor → Defender → Adjudicator → final result
+```
+
+**This milestone performs multi-agent evidence analysis. It does not replace the frontend mock workflow yet.**
+
+### Agent responsibilities
+
+| Agent | Role |
+|-------|------|
+| Prosecutor | Challenges the claim using retrieved evidence only |
+| Defender | Builds the strongest supporting case from retrieved evidence |
+| Adjudicator | Weighs both analyses and returns the final verdict |
+
+Supported verdicts: `SUPPORTS`, `OVERSTATED`, `CONTRADICTS`, `INSUFFICIENT`, `FABRICATED`
+
+### LLM provider configuration
+
+Verification agents depend on an LLM provider abstraction. Configure via environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `LLM_PROVIDER` | `none` (default), `openai`, or `openai-compatible` |
+| `LLM_API_KEY` | Provider API key (never commit real values) |
+| `LLM_MODEL` | Model name (default `gpt-4o-mini`) |
+| `LLM_BASE_URL` | OpenAI-compatible base URL |
+| `LLM_REQUEST_TIMEOUT` | Request timeout in seconds |
+
+If no LLM is configured, the API returns `status: "llm_unavailable"` rather than fabricating a verdict.
+
+### Example request
+
+```bash
+curl -X POST http://127.0.0.1:8001/api/verification/analyze \
+  -H "Content-Type: application/json" \
+  -d "{\"claim\": \"The method improves accuracy by 40%.\", \"doi\": \"10.1000/test\"}"
+```
+
+### Example response
+
+```json
+{
+  "status": "success",
+  "claim": "The method improves accuracy by 40%.",
+  "verdict": "OVERSTATED",
+  "confidence": 0.78,
+  "summary": "Claim is directionally supported but magnitude is overstated.",
+  "reasoning": "Evidence reports 12%, not 40%.",
+  "paper": {
+    "paper_id": "10.1000/test",
+    "doi": "10.1000/test",
+    "title": "Example Paper"
+  },
+  "evidence": [],
+  "prosecutor": { "agent": "prosecutor", "analysis": "...", "stance": "skeptical", "confidence": 0.7 },
+  "defender": { "agent": "defender", "analysis": "...", "stance": "supportive", "confidence": 0.65 },
+  "adjudicator": { "agent": "adjudicator", "analysis": "...", "verdict": "OVERSTATED", "confidence": 0.78 },
+  "suggested_correction": "The method improves accuracy by about 12%."
+}
+```
+
+### Verification HTTP status codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Verification response returned (including insufficient evidence / LLM unavailable) |
+| 400 | Invalid claim or DOI |
+| 404 | Paper not found |
+| 503 | External provider or document download failure |
+
+### Milestone 5 limitations
+
+- Backend-only — frontend still uses mock verification
+- Requires usable evidence chunks; agents are not run without evidence
+- LLM output is validated and evidence references are sanitized against retrieved chunks
+- No vector database or embedding retrieval
 
 ## Tests
 
@@ -309,7 +390,7 @@ The backend allows requests from the Vite frontend origin configured in `FRONTEN
 
 ## Frontend integration
 
-The React app continues to use **mock verification** for `/app/verify`. Milestone 3 adds backend paper retrieval only; the verification UI is not wired to this endpoint yet.
+The React app continues to use **mock verification** for `/app/verify`. Milestone 5 adds the backend multi-agent verification endpoint only; the verification UI is not wired to it yet.
 
 ## Security
 

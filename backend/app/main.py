@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.citations import router as citations_router
 from app.api.routes.evidence import router as evidence_router
 from app.api.routes.papers import router as papers_router
+from app.api.routes.verification import router as verification_router
 
 load_dotenv()
 
@@ -31,6 +32,7 @@ app.add_middleware(
 app.include_router(citations_router)
 app.include_router(papers_router)
 app.include_router(evidence_router)
+app.include_router(verification_router)
 
 
 @app.get("/api/health")
