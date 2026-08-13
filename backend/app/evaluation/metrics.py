@@ -11,6 +11,13 @@ from app.schemas.verification import (
 )
 from app.utils.evidence_text import normalize_evidence_text
 
+HIGH_CONFIDENCE_THRESHOLD = 0.75
+LOW_EVIDENCE_COVERAGE_THRESHOLD = 0.4
+LINKED_SEGMENT_STATUSES = {
+    ClaimSegmentStatus.SUPPORTED,
+    ClaimSegmentStatus.CONTRADICTED,
+}
+
 
 @dataclass(frozen=True)
 class CaseMetrics:
@@ -29,6 +36,10 @@ class CaseMetrics:
     unsupported_segments: int
     contradicted_segments: int
     overall_coverage: float | None
+    evidence_coverage_rate: float
+    traceability_link_rate: float
+    confidence_risk: bool
+    unsupported_claim_detected: bool | None
     adjudicator_verdict: Verdict | None
     verdict_changed: bool
     confidence_before_validation: float | None
@@ -44,6 +55,8 @@ class AggregateMetrics:
     case_count: int = 0
     verdict_correct_count: int = 0
     confusion_matrix: dict[str, dict[str, int]] = field(default_factory=dict)
+    per_verdict_totals: Counter[str] = field(default_factory=Counter)
+    per_verdict_correct: Counter[str] = field(default_factory=Counter)
     evidence_counts: list[int] = field(default_factory=list)
     duplicate_rates: list[float] = field(default_factory=list)
     average_relevances: list[float] = field(default_factory=list)
@@ -51,6 +64,11 @@ class AggregateMetrics:
     traceability_case_count: int = 0
     segment_totals: Counter[str] = field(default_factory=Counter)
     overall_coverages: list[float] = field(default_factory=list)
+    evidence_coverage_rates: list[float] = field(default_factory=list)
+    traceability_link_rates: list[float] = field(default_factory=list)
+    confidence_risk_count: int = 0
+    unsupported_claim_cases: int = 0
+    unsupported_claim_detected_count: int = 0
     validation_override_count: int = 0
     validation_warning_case_count: int = 0
     agent_agreement_true_count: int = 0
@@ -67,6 +85,14 @@ class AggregateMetrics:
         if self.case_count == 0:
             return 0.0
         return self.verdict_correct_count / self.case_count
+
+    @property
+    def per_verdict_accuracy(self) -> dict[str, float]:
+        return {
+            verdict: self.per_verdict_correct[verdict] / total
+            for verdict, total in self.per_verdict_totals.items()
+            if total > 0
+        }
 
     @property
     def average_evidence_count(self) -> float:
@@ -93,6 +119,26 @@ class AggregateMetrics:
     @property
     def average_overall_coverage(self) -> float:
         return _mean(self.overall_coverages)
+
+    @property
+    def average_evidence_coverage_rate(self) -> float:
+        return _mean(self.evidence_coverage_rates)
+
+    @property
+    def average_traceability_link_rate(self) -> float:
+        return _mean(self.traceability_link_rates)
+
+    @property
+    def confidence_risk_rate(self) -> float:
+        if self.case_count == 0:
+            return 0.0
+        return self.confidence_risk_count / self.case_count
+
+    @property
+    def unsupported_claim_detection_rate(self) -> float | None:
+        if self.unsupported_claim_cases == 0:
+            return None
+        return self.unsupported_claim_detected_count / self.unsupported_claim_cases
 
     @property
     def validation_override_rate(self) -> float:
@@ -156,6 +202,8 @@ def evaluate_case(case_id: str, expected_verdict: Verdict, response: Verificatio
 
     traceability = response.claim_traceability
     traceability_metrics = _traceability_metrics(traceability)
+    evidence_coverage_rate = _evidence_coverage_rate(traceability)
+    traceability_link_rate = _traceability_link_rate(traceability)
 
     adjudicator_verdict = response.adjudicator.verdict if response.adjudicator else None
     confidence_before = response.adjudicator.confidence if response.adjudicator else None
@@ -174,6 +222,15 @@ def evaluate_case(case_id: str, expected_verdict: Verdict, response: Verificatio
         correctness = 1.0 if verdict_correct else 0.0
         confidence_error = abs(confidence - correctness)
 
+    confidence_risk = False
+    if confidence is not None and confidence >= HIGH_CONFIDENCE_THRESHOLD:
+        if not verdict_correct or evidence_coverage_rate < LOW_EVIDENCE_COVERAGE_THRESHOLD:
+            confidence_risk = True
+
+    unsupported_claim_detected = None
+    if expected_verdict in {Verdict.INSUFFICIENT, Verdict.FABRICATED}:
+        unsupported_claim_detected = actual_verdict in {Verdict.INSUFFICIENT, Verdict.FABRICATED}
+
     return CaseMetrics(
         case_id=case_id,
         expected_verdict=expected_verdict,
@@ -190,6 +247,10 @@ def evaluate_case(case_id: str, expected_verdict: Verdict, response: Verificatio
         unsupported_segments=traceability_metrics["unsupported_segments"],
         contradicted_segments=traceability_metrics["contradicted_segments"],
         overall_coverage=traceability_metrics["overall_coverage"],
+        evidence_coverage_rate=evidence_coverage_rate,
+        traceability_link_rate=traceability_link_rate,
+        confidence_risk=confidence_risk,
+        unsupported_claim_detected=unsupported_claim_detected,
         adjudicator_verdict=adjudicator_verdict,
         verdict_changed=verdict_changed,
         confidence_before_validation=confidence_before,
@@ -209,9 +270,10 @@ def aggregate_case_metrics(cases: list[CaseMetrics]) -> AggregateMetrics:
         actual_key = case.actual_verdict.value if case.actual_verdict else "NONE"
         aggregate.confusion_matrix.setdefault(expected_key, defaultdict(int))
         aggregate.confusion_matrix[expected_key][actual_key] += 1
-
+        aggregate.per_verdict_totals[expected_key] += 1
         if case.verdict_correct:
             aggregate.verdict_correct_count += 1
+            aggregate.per_verdict_correct[expected_key] += 1
         else:
             aggregate.incorrect_case_ids.append(case.case_id)
 
@@ -219,6 +281,16 @@ def aggregate_case_metrics(cases: list[CaseMetrics]) -> AggregateMetrics:
         aggregate.duplicate_rates.append(case.duplicate_rate)
         aggregate.average_relevances.append(case.average_relevance)
         aggregate.average_claim_overlaps.append(case.average_claim_overlap)
+        aggregate.evidence_coverage_rates.append(case.evidence_coverage_rate)
+        aggregate.traceability_link_rates.append(case.traceability_link_rate)
+
+        if case.confidence_risk:
+            aggregate.confidence_risk_count += 1
+
+        if case.unsupported_claim_detected is not None:
+            aggregate.unsupported_claim_cases += 1
+            if case.unsupported_claim_detected:
+                aggregate.unsupported_claim_detected_count += 1
 
         if case.traceability_present:
             aggregate.traceability_case_count += 1
@@ -287,6 +359,24 @@ def _traceability_metrics(traceability: ClaimTraceability | None) -> dict[str, f
         "contradicted_segments": counts[ClaimSegmentStatus.CONTRADICTED.value],
         "overall_coverage": traceability.overall_coverage,
     }
+
+
+def _evidence_coverage_rate(traceability: ClaimTraceability | None) -> float:
+    if traceability is None or not traceability.segments:
+        return 0.0
+    covered = sum(1 for segment in traceability.segments if segment.evidence_ids)
+    return covered / len(traceability.segments)
+
+
+def _traceability_link_rate(traceability: ClaimTraceability | None) -> float:
+    if traceability is None or not traceability.segments:
+        return 0.0
+    linked = sum(
+        1
+        for segment in traceability.segments
+        if segment.evidence_ids and segment.status in LINKED_SEGMENT_STATUSES
+    )
+    return linked / len(traceability.segments)
 
 
 def _mean(values: list[float]) -> float:

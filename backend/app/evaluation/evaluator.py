@@ -15,6 +15,11 @@ class EvaluationResult:
     cases: list[CaseMetrics]
     aggregate: AggregateMetrics
     skipped_case_ids: list[str]
+    responses_by_id: dict[str, VerificationResponse] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.responses_by_id is None:
+            object.__setattr__(self, "responses_by_id", {})
 
 
 def evaluate_offline_dataset(
@@ -24,6 +29,7 @@ def evaluate_offline_dataset(
 ) -> EvaluationResult:
     case_metrics: list[CaseMetrics] = []
     skipped: list[str] = []
+    responses_by_id: dict[str, VerificationResponse] = {}
 
     for case in dataset.cases:
         try:
@@ -31,6 +37,7 @@ def evaluate_offline_dataset(
         except FileNotFoundError:
             skipped.append(case.id)
             continue
+        responses_by_id[case.id] = response
         case_metrics.append(evaluate_case(case.id, case.expected_verdict, response))
 
     aggregate = aggregate_case_metrics(case_metrics)
@@ -39,6 +46,7 @@ def evaluate_offline_dataset(
         cases=case_metrics,
         aggregate=aggregate,
         skipped_case_ids=skipped,
+        responses_by_id=responses_by_id,
     )
 
 
@@ -65,6 +73,7 @@ def evaluate_responses(
         cases=case_metrics,
         aggregate=aggregate_case_metrics(case_metrics),
         skipped_case_ids=skipped,
+        responses_by_id=responses_by_id,
     )
 
 
@@ -84,4 +93,5 @@ def load_and_evaluate_offline(
         cases=result.cases,
         aggregate=result.aggregate,
         skipped_case_ids=result.skipped_case_ids,
+        responses_by_id=result.responses_by_id,
     )

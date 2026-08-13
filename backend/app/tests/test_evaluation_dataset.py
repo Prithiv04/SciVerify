@@ -21,7 +21,7 @@ from app.schemas.verification import Verdict
 class TestDatasetLoader:
     def test_default_dataset_loads(self) -> None:
         dataset = load_dataset()
-        assert len(dataset.cases) == 12
+        assert len(dataset.cases) == 30
         assert dataset.cases[0].id == "cas9_supports_001"
 
     def test_invalid_root_rejected(self) -> None:
@@ -120,7 +120,7 @@ class TestOfflineEvaluation:
 
     def test_offline_evaluation_matches_expected_verdicts(self) -> None:
         result = load_and_evaluate_offline()
-        assert result.aggregate.case_count == 12
+        assert result.aggregate.case_count == 30
         assert result.aggregate.verdict_accuracy == 1.0
         assert result.skipped_case_ids == []
 
@@ -135,14 +135,14 @@ class TestOfflineEvaluation:
         )
         result = evaluate_offline_dataset(dataset, fixtures_dir=fixtures_dir)
         assert len(result.cases) == 1
-        assert len(result.skipped_case_ids) == 11
+        assert len(result.skipped_case_ids) == 29
 
     def test_report_generation(self) -> None:
         result = load_and_evaluate_offline()
         payload = build_report_payload(result)
         markdown = render_markdown_report(result)
 
-        assert payload["cases_evaluated"] == 12
+        assert payload["cases_evaluated"] == 30
         assert payload["verdict_accuracy"] == 1.0
         assert "SciVerify Evaluation" in markdown
         assert "Verdict Accuracy" in markdown

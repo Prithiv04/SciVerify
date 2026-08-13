@@ -84,6 +84,132 @@
       "doi": "10.1000/example.2024.011",
       "expected_verdict": "SUPPORTS",
       "description": "Legacy-style response without traceability metadata."
+    },
+    {
+      "id": "conditional_supports_003",
+      "claim": "The inhibitor reduces kinase activity when ATP is present.",
+      "doi": "10.1000/example.2024.012",
+      "expected_verdict": "SUPPORTS",
+      "description": "Claim is supported only under the stated condition."
+    },
+    {
+      "id": "dose_response_supports_003",
+      "claim": "A 10 mg dose reduced symptoms in the trial.",
+      "doi": "10.1000/example.2024.013",
+      "expected_verdict": "SUPPORTS",
+      "description": "Specific dose-response claim supported by trial evidence."
+    },
+    {
+      "id": "photosynthesis_supports_003",
+      "claim": "Plants convert light energy into chemical energy during photosynthesis.",
+      "doi": "10.1000/example.2024.014",
+      "expected_verdict": "SUPPORTS",
+      "description": "Cross-domain biology claim directly supported by evidence."
+    },
+    {
+      "id": "conclusion_reversal_003",
+      "claim": "The study proves the drug is safe for long-term use.",
+      "doi": "10.1000/example.2024.015",
+      "expected_verdict": "CONTRADICTS",
+      "description": "Claim reverses the paper's safety conclusion."
+    },
+    {
+      "id": "opposite_direction_003",
+      "claim": "The mutation always increases enzyme activity.",
+      "doi": "10.1000/example.2024.016",
+      "expected_verdict": "CONTRADICTS",
+      "description": "Evidence reports decreased activity in mutants."
+    },
+    {
+      "id": "safety_contradicts_003",
+      "claim": "The compound has no toxic effects in vivo.",
+      "doi": "10.1000/example.2024.017",
+      "expected_verdict": "CONTRADICTS",
+      "description": "Paper reports toxicity at therapeutic doses."
+    },
+    {
+      "id": "always_eliminates_003",
+      "claim": "The treatment always eliminates the pathogen.",
+      "doi": "10.1000/example.2024.018",
+      "expected_verdict": "OVERSTATED",
+      "description": "Exaggerated universal language unsupported by evidence."
+    },
+    {
+      "id": "proves_guarantees_003",
+      "claim": "The data proves the mechanism guarantees remission.",
+      "doi": "10.1000/example.2024.019",
+      "expected_verdict": "OVERSTATED",
+      "description": "Claim uses proves/guarantees beyond what evidence establishes."
+    },
+    {
+      "id": "compound_unsupported_detail_003",
+      "claim": "CRISPR editing is efficient and has no off-target effects.",
+      "doi": "10.1000/example.2024.020",
+      "expected_verdict": "OVERSTATED",
+      "description": "Broadly correct claim with an unsupported safety detail."
+    },
+    {
+      "id": "multi_assertion_one_supported_003",
+      "claim": "The vaccine prevents infection and eliminates transmission completely.",
+      "doi": "10.1000/example.2024.021",
+      "expected_verdict": "OVERSTATED",
+      "description": "Compound claim where only one assertion is partially supported."
+    },
+    {
+      "id": "related_not_establishing_003",
+      "claim": "The protein directly regulates the metabolic pathway.",
+      "doi": "10.1000/example.2024.022",
+      "expected_verdict": "INSUFFICIENT",
+      "description": "Related detection evidence does not establish direct regulation."
+    },
+    {
+      "id": "tangential_topic_003",
+      "claim": "The intervention improves cognitive performance in elderly patients.",
+      "doi": "10.1000/example.2024.023",
+      "expected_verdict": "INSUFFICIENT",
+      "description": "Evidence is scientifically related but does not establish the claim."
+    },
+    {
+      "id": "unrelated_numbers_003",
+      "claim": "The assay sensitivity is 98%.",
+      "doi": "10.1000/example.2024.024",
+      "expected_verdict": "INSUFFICIENT",
+      "description": "Numerical values in evidence are unrelated to the claim."
+    },
+    {
+      "id": "weak_conditional_003",
+      "claim": "The enzyme is active only under acidic conditions in all tissues.",
+      "doi": "10.1000/example.2024.025",
+      "expected_verdict": "INSUFFICIENT",
+      "description": "Weak conditional evidence cannot support universal tissue claim."
+    },
+    {
+      "id": "not_in_paper_003",
+      "claim": "The authors reported a phase III multicenter trial with 10,000 patients.",
+      "doi": "10.1000/example.2024.026",
+      "expected_verdict": "FABRICATED",
+      "description": "Claim references trial details not present in the cited paper."
+    },
+    {
+      "id": "invented_statistic_003",
+      "claim": "The treatment achieved an 87% five-year survival rate.",
+      "doi": "10.1000/example.2024.027",
+      "expected_verdict": "FABRICATED",
+      "description": "Statistic asserted in claim is not supported by the source."
+    },
+    {
+      "id": "no_evidence_present_003",
+      "claim": "The molecule binds irreversibly to the receptor.",
+      "doi": "10.1000/example.2024.028",
+      "expected_verdict": "FABRICATED",
+      "description": "Claim has no meaningful supporting evidence in the paper."
+    },
+    {
+      "id": "never_occurs_003",
+      "claim": "Resistance never develops under this regimen.",
+      "doi": "10.1000/example.2024.029",
+      "expected_verdict": "CONTRADICTS",
+      "description": "Never-language contradicted by observed resistance."
     }
   ]
 }

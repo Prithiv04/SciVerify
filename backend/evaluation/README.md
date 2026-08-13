@@ -113,6 +113,26 @@ Use only when you explicitly want live pipeline results. Automated tests never u
 - Offline fixtures test the evaluator and regression tooling; they do not replace end-to-end live verification.
 - Small floating-point drift is tolerated via regression thresholds.
 
+## Robustness & failure analysis
+
+The evaluation report includes:
+
+- per-verdict accuracy
+- evidence coverage rate and traceability link rate
+- confidence risk rate
+- unsupported-claim detection rate
+- deterministic failure categories (wrong verdict, weak evidence, missing evidence, poor traceability, overconfidence, agent disagreement, invalid evidence references, insufficient-evidence not detected)
+- worst-performing cases with diagnostic details
+
+Regression thresholds (environment variables):
+
+- `EVAL_MIN_VERDICT_ACCURACY` (default `0.80`) — absolute floor
+- `EVAL_MAX_CONFIDENCE_REGRESSION` (default `0.10`)
+- `EVAL_MAX_TRACEABILITY_REGRESSION` (default `0.10`)
+- `EVAL_MAX_EVIDENCE_REGRESSION` (default `0.10`)
+
+See also the baseline-relative tolerances listed above.
+
 ## Tests
 
 ```bash

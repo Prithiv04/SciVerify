@@ -26,6 +26,10 @@ def _aggregate(**overrides: float) -> AggregateMetrics:
         unsupported_segments=0,
         contradicted_segments=0,
         overall_coverage=0.9,
+        evidence_coverage_rate=1.0,
+        traceability_link_rate=1.0,
+        confidence_risk=False,
+        unsupported_claim_detected=None,
         adjudicator_verdict=Verdict.SUPPORTS,
         verdict_changed=False,
         confidence_before_validation=0.8,
@@ -108,3 +112,41 @@ class TestRegressionComparison:
         assert payload["case_count"] == 1
         assert payload["verdict_accuracy"] == 1.0
         assert payload["average_overall_coverage"] == 0.9
+        assert "average_evidence_coverage_rate" in payload
+
+    def test_min_verdict_accuracy_threshold(self) -> None:
+        baseline = {"verdict_accuracy": 1.0}
+        current = _aggregate()
+        current.verdict_correct_count = 7
+        current.case_count = 10
+        comparison = compare_to_baseline(
+            current,
+            baseline,
+            thresholds=RegressionThresholds(min_verdict_accuracy=0.80),
+        )
+        assert comparison.passed is False
+        assert any(finding.metric == "verdict_accuracy" for finding in comparison.findings)
+
+    def test_confidence_regression_threshold(self) -> None:
+        baseline = {"average_confidence_error": 0.20}
+        current = _aggregate()
+        current.confidence_errors = [0.35]
+        comparison = compare_to_baseline(
+            current,
+            baseline,
+            thresholds=RegressionThresholds(max_confidence_regression=0.10),
+        )
+        assert comparison.passed is False
+        assert comparison.findings[0].metric == "average_confidence_error"
+
+    def test_evidence_coverage_regression_threshold(self) -> None:
+        baseline = {"average_evidence_coverage_rate": 0.90}
+        current = _aggregate()
+        current.evidence_coverage_rates = [0.70]
+        comparison = compare_to_baseline(
+            current,
+            baseline,
+            thresholds=RegressionThresholds(max_evidence_regression=0.10),
+        )
+        assert comparison.passed is False
+        assert comparison.findings[0].metric == "average_evidence_coverage_rate"

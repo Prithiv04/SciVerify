@@ -58,6 +58,40 @@ def _traceability(segments: list[tuple[str, ClaimSegmentStatus, float, list[str]
     )
 
 
+CASE_IDS = (
+    "cas9_supports_001",
+    "accuracy_overstated_001",
+    "mortality_contradicts_001",
+    "insufficient_evidence_001",
+    "fabricated_claim_001",
+    "numeric_supports_001",
+    "universal_overstated_001",
+    "weak_insufficient_001",
+    "mechanism_supports_002",
+    "direction_contradicts_002",
+    "magnitude_overstated_002",
+    "legacy_no_traceability_001",
+    "conditional_supports_003",
+    "dose_response_supports_003",
+    "photosynthesis_supports_003",
+    "conclusion_reversal_003",
+    "opposite_direction_003",
+    "safety_contradicts_003",
+    "always_eliminates_003",
+    "proves_guarantees_003",
+    "compound_unsupported_detail_003",
+    "multi_assertion_one_supported_003",
+    "related_not_establishing_003",
+    "tangential_topic_003",
+    "unrelated_numbers_003",
+    "weak_conditional_003",
+    "not_in_paper_003",
+    "invented_statistic_003",
+    "no_evidence_present_003",
+    "never_occurs_003",
+)
+
+
 def build_fixture(case_id: str) -> VerificationResponse:
     builders = {
         "cas9_supports_001": _cas9_supports,
@@ -72,26 +106,31 @@ def build_fixture(case_id: str) -> VerificationResponse:
         "direction_contradicts_002": _direction_contradicts,
         "magnitude_overstated_002": _magnitude_overstated,
         "legacy_no_traceability_001": _legacy_no_traceability,
+        "conditional_supports_003": _conditional_supports,
+        "dose_response_supports_003": _dose_response_supports,
+        "photosynthesis_supports_003": _photosynthesis_supports,
+        "conclusion_reversal_003": _conclusion_reversal,
+        "opposite_direction_003": _opposite_direction,
+        "safety_contradicts_003": _safety_contradicts,
+        "always_eliminates_003": _always_eliminates,
+        "proves_guarantees_003": _proves_guarantees,
+        "compound_unsupported_detail_003": _compound_unsupported_detail,
+        "multi_assertion_one_supported_003": _multi_assertion_one_supported,
+        "related_not_establishing_003": _related_not_establishing,
+        "tangential_topic_003": _tangential_topic,
+        "unrelated_numbers_003": _unrelated_numbers,
+        "weak_conditional_003": _weak_conditional,
+        "not_in_paper_003": _not_in_paper,
+        "invented_statistic_003": _invented_statistic,
+        "no_evidence_present_003": _no_evidence_present,
+        "never_occurs_003": _never_occurs,
     }
     return builders[case_id]()
 
 
 def write_all_fixtures(output_dir: Path) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    for case_id in (
-        "cas9_supports_001",
-        "accuracy_overstated_001",
-        "mortality_contradicts_001",
-        "insufficient_evidence_001",
-        "fabricated_claim_001",
-        "numeric_supports_001",
-        "universal_overstated_001",
-        "weak_insufficient_001",
-        "mechanism_supports_002",
-        "direction_contradicts_002",
-        "magnitude_overstated_002",
-        "legacy_no_traceability_001",
-    ):
+    for case_id in CASE_IDS:
         response = build_fixture(case_id)
         path = output_dir / f"{case_id}.json"
         path.write_text(
@@ -452,4 +491,286 @@ def _success_response(
         agent_agreement=agent_agreement,
         validation_warnings=validation_warnings,
         claim_traceability=traceability,
+    )
+
+
+def _conditional_supports() -> VerificationResponse:
+    claim = "The inhibitor reduces kinase activity when ATP is present."
+    evidence = [_evidence("c1", "Kinase activity decreased in the presence of ATP.", relevance=0.86, overlap=0.83)]
+    return _success_response(
+        claim,
+        Verdict.SUPPORTS,
+        0.84,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.SUPPORTED, 0.84, ["c1"])]
+        ),
+    )
+
+
+def _dose_response_supports() -> VerificationResponse:
+    claim = "A 10 mg dose reduced symptoms in the trial."
+    evidence = [_evidence("c1", "The 10 mg dose group showed reduced symptoms.", relevance=0.88, overlap=0.85)]
+    return _success_response(
+        claim,
+        Verdict.SUPPORTS,
+        0.87,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.SUPPORTED, 0.87, ["c1"])]
+        ),
+    )
+
+
+def _photosynthesis_supports() -> VerificationResponse:
+    claim = "Plants convert light energy into chemical energy during photosynthesis."
+    evidence = [
+        _evidence(
+            "c1",
+            "Photosynthesis converts light energy into chemical energy in chloroplasts.",
+            relevance=0.9,
+            overlap=0.87,
+        )
+    ]
+    return _success_response(
+        claim,
+        Verdict.SUPPORTS,
+        0.89,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.SUPPORTED, 0.89, ["c1"])]
+        ),
+    )
+
+
+def _conclusion_reversal() -> VerificationResponse:
+    claim = "The study proves the drug is safe for long-term use."
+    evidence = [_evidence("c1", "Serious adverse events were observed during follow-up.", relevance=0.85, overlap=0.81)]
+    return _success_response(
+        claim,
+        Verdict.CONTRADICTS,
+        0.83,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.CONTRADICTED, 0.8, ["c1"])]
+        ),
+        adjudicator_verdict=Verdict.CONTRADICTS,
+        agent_agreement=False,
+    )
+
+
+def _opposite_direction() -> VerificationResponse:
+    claim = "The mutation always increases enzyme activity."
+    evidence = [_evidence("c1", "Enzyme activity decreased in mutant strains.", relevance=0.84, overlap=0.79)]
+    return _success_response(
+        claim,
+        Verdict.CONTRADICTS,
+        0.82,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.CONTRADICTED, 0.78, ["c1"])]
+        ),
+        adjudicator_verdict=Verdict.CONTRADICTS,
+    )
+
+
+def _safety_contradicts() -> VerificationResponse:
+    claim = "The compound has no toxic effects in vivo."
+    evidence = [_evidence("c1", "Significant toxicity was observed at therapeutic doses.", relevance=0.86, overlap=0.82)]
+    return _success_response(
+        claim,
+        Verdict.CONTRADICTS,
+        0.84,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.CONTRADICTED, 0.81, ["c1"])]
+        ),
+        adjudicator_verdict=Verdict.CONTRADICTS,
+        agent_agreement=False,
+    )
+
+
+def _always_eliminates() -> VerificationResponse:
+    claim = "The treatment always eliminates the pathogen."
+    evidence = [_evidence("c1", "Pathogen load was reduced in most treated samples.", relevance=0.76, overlap=0.58)]
+    return _success_response(
+        claim,
+        Verdict.OVERSTATED,
+        0.74,
+        evidence,
+        traceability=_traceability(
+            [
+                ("segment_1", "The treatment", ClaimSegmentStatus.PARTIALLY_SUPPORTED, 0.55, ["c1"]),
+                ("segment_2", "always eliminates the pathogen", ClaimSegmentStatus.UNSUPPORTED, 0.15, []),
+            ]
+        ),
+    )
+
+
+def _proves_guarantees() -> VerificationResponse:
+    claim = "The data proves the mechanism guarantees remission."
+    evidence = [_evidence("c1", "Remission was observed in a subset of participants.", relevance=0.72, overlap=0.52)]
+    return _success_response(
+        claim,
+        Verdict.OVERSTATED,
+        0.73,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.PARTIALLY_SUPPORTED, 0.48, ["c1"])]
+        ),
+    )
+
+
+def _compound_unsupported_detail() -> VerificationResponse:
+    claim = "CRISPR editing is efficient and has no off-target effects."
+    evidence = [_evidence("c1", "CRISPR editing showed high efficiency in targeted loci.", relevance=0.85, overlap=0.8)]
+    return _success_response(
+        claim,
+        Verdict.OVERSTATED,
+        0.79,
+        evidence,
+        traceability=_traceability(
+            [
+                ("segment_1", "CRISPR editing is efficient", ClaimSegmentStatus.SUPPORTED, 0.82, ["c1"]),
+                ("segment_2", "has no off-target effects", ClaimSegmentStatus.UNSUPPORTED, 0.1, []),
+            ]
+        ),
+    )
+
+
+def _multi_assertion_one_supported() -> VerificationResponse:
+    claim = "The vaccine prevents infection and eliminates transmission completely."
+    evidence = [_evidence("c1", "Vaccination reduced infection rates in the cohort.", relevance=0.8, overlap=0.72)]
+    return _success_response(
+        claim,
+        Verdict.OVERSTATED,
+        0.77,
+        evidence,
+        traceability=_traceability(
+            [
+                ("segment_1", "The vaccine prevents infection", ClaimSegmentStatus.PARTIALLY_SUPPORTED, 0.68, ["c1"]),
+                ("segment_2", "eliminates transmission completely", ClaimSegmentStatus.UNSUPPORTED, 0.08, []),
+            ]
+        ),
+    )
+
+
+def _related_not_establishing() -> VerificationResponse:
+    claim = "The protein directly regulates the metabolic pathway."
+    evidence = [_evidence("c1", "The protein was detected in pathway-associated cells.", relevance=0.45, overlap=0.28)]
+    return _success_response(
+        claim,
+        Verdict.INSUFFICIENT,
+        0.44,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.22, [])]
+        ),
+        adjudicator_verdict=Verdict.INSUFFICIENT,
+    )
+
+
+def _tangential_topic() -> VerificationResponse:
+    claim = "The intervention improves cognitive performance in elderly patients."
+    evidence = [_evidence("c1", "The study measured sleep duration in elderly participants.", relevance=0.35, overlap=0.2)]
+    return _success_response(
+        claim,
+        Verdict.INSUFFICIENT,
+        0.4,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.18, [])]
+        ),
+        adjudicator_verdict=Verdict.INSUFFICIENT,
+    )
+
+
+def _unrelated_numbers() -> VerificationResponse:
+    claim = "The assay sensitivity is 98%."
+    evidence = [_evidence("c1", "The cohort included 98 participants.", relevance=0.3, overlap=0.12)]
+    item = evidence[0].model_copy(update={"evidence_numbers": ["98"], "numeric_overlap": 0.0})
+    return _success_response(
+        claim,
+        Verdict.INSUFFICIENT,
+        0.38,
+        [item],
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.1, [])]
+        ),
+        adjudicator_verdict=Verdict.INSUFFICIENT,
+    )
+
+
+def _weak_conditional() -> VerificationResponse:
+    claim = "The enzyme is active only under acidic conditions in all tissues."
+    evidence = [_evidence("c1", "Activity was observed at pH 5 in one cell line.", relevance=0.28, overlap=0.2)]
+    return _success_response(
+        claim,
+        Verdict.INSUFFICIENT,
+        0.42,
+        evidence,
+        traceability=_traceability(
+            [
+                ("segment_1", "The enzyme is active only under acidic conditions", ClaimSegmentStatus.UNSUPPORTED, 0.2, []),
+                ("segment_2", "in all tissues", ClaimSegmentStatus.UNSUPPORTED, 0.05, []),
+            ]
+        ),
+        adjudicator_verdict=Verdict.INSUFFICIENT,
+    )
+
+
+def _not_in_paper() -> VerificationResponse:
+    claim = "The authors reported a phase III multicenter trial with 10,000 patients."
+    return _success_response(
+        claim,
+        Verdict.FABRICATED,
+        0.7,
+        [],
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.04, [])]
+        ),
+        validation_warnings=["Claim references content not found in the cited paper."],
+    )
+
+
+def _invented_statistic() -> VerificationResponse:
+    claim = "The treatment achieved an 87% five-year survival rate."
+    evidence = [_evidence("c1", "Follow-up was conducted for twelve months.", relevance=0.25, overlap=0.1)]
+    return _success_response(
+        claim,
+        Verdict.FABRICATED,
+        0.68,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.06, [])]
+        ),
+        validation_warnings=["Survival statistic not supported by cited evidence."],
+    )
+
+
+def _no_evidence_present() -> VerificationResponse:
+    claim = "The molecule binds irreversibly to the receptor."
+    return _success_response(
+        claim,
+        Verdict.FABRICATED,
+        0.66,
+        [],
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.UNSUPPORTED, 0.03, [])]
+        ),
+    )
+
+
+def _never_occurs() -> VerificationResponse:
+    claim = "Resistance never develops under this regimen."
+    evidence = [_evidence("c1", "Resistance emerged in three of twelve treated lines.", relevance=0.82, overlap=0.76)]
+    return _success_response(
+        claim,
+        Verdict.CONTRADICTS,
+        0.8,
+        evidence,
+        traceability=_traceability(
+            [("segment_1", claim, ClaimSegmentStatus.CONTRADICTED, 0.77, ["c1"])]
+        ),
+        adjudicator_verdict=Verdict.CONTRADICTS,
     )

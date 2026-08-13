@@ -83,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
             cases=result.cases,
             aggregate=result.aggregate,
             skipped_case_ids=result.skipped_case_ids,
+            responses_by_id=result.responses_by_id,
         )
 
     regression = None
@@ -113,10 +114,12 @@ def _run_live_evaluation(dataset_path: Path):
     dataset = load_dataset(dataset_path)
     cases = []
     skipped: list[str] = []
+    responses_by_id: dict = {}
 
     for case in dataset.cases:
         try:
             response = analyze_verification(case.claim, case.doi)
+            responses_by_id[case.id] = response
             cases.append(evaluate_case(case.id, case.expected_verdict, response))
         except Exception as exc:
             print(f"Skipped live case {case.id}: {exc}", file=sys.stderr)
@@ -130,6 +133,7 @@ def _run_live_evaluation(dataset_path: Path):
         cases=cases,
         aggregate=aggregate,
         skipped_case_ids=skipped,
+        responses_by_id=responses_by_id,
     )
 
 
