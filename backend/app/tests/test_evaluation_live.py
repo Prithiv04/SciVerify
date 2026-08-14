@@ -100,6 +100,57 @@ class TestEvaluateLiveCase:
         assert live_result.retrieval_attempts == MAX_RETRIES + 1  # Verification failures retry
         assert response is None
 
+    def test_insufficient_evidence_response_status(self) -> None:
+        """Test that analyze_verification returning INSUFFICIENT_EVIDENCE is marked as skipped."""
+        from app.schemas.verification import VerificationStatus
+
+        case = BenchmarkCase(
+            id="test-003b",
+            claim="Test claim",
+            doi="10.1000/test.2024.002",
+            expected_verdict=Verdict.SUPPORTS,
+            description="Test case",
+            live_evaluable=True,
+        )
+
+        mock_response = MagicMock()
+        mock_response.status = VerificationStatus.INSUFFICIENT_EVIDENCE
+        mock_response.reasoning = "Full text is unavailable"
+        mock_response.detail = None
+
+        with patch("app.evaluation.live_diagnostics.analyze_verification", return_value=mock_response):
+            live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
+
+        assert live_result.status == "skipped"
+        assert live_result.failure_category == LiveFailureCategory.FULL_TEXT_UNAVAILABLE
+        assert live_result.actual_verdict is None
+        assert response is None
+
+    def test_llm_unavailable_response_status(self) -> None:
+        """Test that analyze_verification returning LLM_UNAVAILABLE is marked as failed."""
+        from app.schemas.verification import VerificationStatus
+
+        case = BenchmarkCase(
+            id="test-003c",
+            claim="Test claim",
+            doi="10.1000/test.2024.002",
+            expected_verdict=Verdict.SUPPORTS,
+            description="Test case",
+            live_evaluable=True,
+        )
+
+        mock_response = MagicMock()
+        mock_response.status = VerificationStatus.LLM_UNAVAILABLE
+        mock_response.detail = "LLM provider not configured"
+
+        with patch("app.evaluation.live_diagnostics.analyze_verification", return_value=mock_response):
+            live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
+
+        assert live_result.status == "failed"
+        assert live_result.failure_category == LiveFailureCategory.LLM_FAILURE
+        assert live_result.actual_verdict is None
+        assert response is None
+
     def test_infrastructure_vs_verification_failure_separation(self) -> None:
         """Test that infrastructure failures are separated from verification failures."""
         # Infrastructure failure (DOI not found)

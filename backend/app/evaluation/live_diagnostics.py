@@ -14,6 +14,7 @@ from app.schemas.verification import (
     LiveFailureCategory,
     Verdict,
     VerificationResponse,
+    VerificationStatus,
 )
 from app.services.document_parser import DocumentParseError
 from app.services.document_retriever import InterstitialPageError, PaywallError
@@ -287,10 +288,26 @@ def evaluate_live_case(
         retrieval_attempts = attempts
 
         # Evaluate the response
-        case_metrics = evaluate_case(case.id, case.expected_verdict, response)
-        actual_verdict = case_metrics.actual_verdict
-        confidence = case_metrics.confidence
-        status = "evaluated"
+        if response.status == VerificationStatus.INSUFFICIENT_EVIDENCE:
+            status = "skipped"
+            failure_category = LiveFailureCategory.FULL_TEXT_UNAVAILABLE
+            failure_reason = response.reasoning or response.detail or "Insufficient evidence available for verification."
+            response = None
+        elif response.status in (VerificationStatus.LLM_UNAVAILABLE, VerificationStatus.VERIFICATION_FAILED):
+            status = "failed"
+            failure_category = LiveFailureCategory.LLM_FAILURE
+            failure_reason = response.detail or f"Verification ended with status: {response.status.value}"
+            response = None
+        elif response.status == VerificationStatus.SUCCESS:
+            case_metrics = evaluate_case(case.id, case.expected_verdict, response)
+            actual_verdict = case_metrics.actual_verdict
+            confidence = case_metrics.confidence
+            status = "evaluated"
+        else:
+            status = "failed"
+            failure_category = LiveFailureCategory.UNKNOWN_FAILURE
+            failure_reason = response.detail or f"Unexpected verification status: {response.status}"
+            response = None
 
     except Exception as exc:
         failure_category = classify_exception(exc)
