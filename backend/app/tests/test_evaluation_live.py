@@ -71,7 +71,7 @@ class TestEvaluateLiveCase:
         with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=PaperNotFoundError("Paper not found")):
             live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
 
-        assert live_result.status == "failed"
+        assert live_result.status == "skipped"
         assert live_result.case_id == "test-002"
         assert live_result.failure_category == LiveFailureCategory.DOI_NOT_FOUND
         assert live_result.failure_reason == "Paper not found"
@@ -178,8 +178,8 @@ class TestEvaluateLiveCase:
         with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=PaperNotFoundError("Paper not found")):
             live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
 
-        # DOI_NOT_FOUND is deterministic (non-retryable), should fail immediately with 1 attempt
-        assert live_result.status == "failed"
+        # DOI_NOT_FOUND is deterministic (non-retryable retrieval failure), should skip immediately with 1 attempt
+        assert live_result.status == "skipped"
         assert live_result.retrieval_attempts == 1  # Deterministic failures have 1 attempt
         assert response is None
 
@@ -197,7 +197,7 @@ class TestEvaluateLiveCase:
         with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=PaperNotFoundError("Paper not found")):
             live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
 
-        assert live_result.status == "failed"
+        assert live_result.status == "skipped"
         assert live_result.failure_category == LiveFailureCategory.DOI_NOT_FOUND
         assert live_result.retrieval_attempts == 1  # Should be exactly 1 for deterministic failures
         assert response is None

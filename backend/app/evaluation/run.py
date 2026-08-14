@@ -12,6 +12,7 @@ from app.evaluation.live_diagnostics import (
     DETERMINISTIC_FAILURE_CATEGORIES,
     LiveCaseResult,
     LiveEvaluationMetrics,
+    RETRIEVAL_FAILURE_CATEGORIES,
 )
 from app.evaluation.regression import (
     aggregate_to_baseline_payload,
@@ -248,7 +249,7 @@ def _run_live_evaluation(dataset_path: Path, skip_unhealthy: bool = False):
                 live_metrics.failure_category_counts[category_name] += 1
 
                 # Check if this is a retrieval/infrastructure failure
-                if live_result.failure_category in DETERMINISTIC_FAILURE_CATEGORIES:
+                if live_result.failure_category in RETRIEVAL_FAILURE_CATEGORIES:
                     live_metrics.retrieval_failure_count += 1
                     skip_reasons[f"retrieval_{category_name}"] = skip_reasons.get(f"retrieval_{category_name}", 0) + 1
                 else:

@@ -9,8 +9,12 @@ from app.evaluation.live_diagnostics import (
     DETERMINISTIC_FAILURE_CATEGORIES,
     MAX_RETRIES,
     RETRYABLE_CATEGORIES,
+    RETRIEVAL_FAILURE_CATEGORIES,
     should_retry,
+    VERIFICATION_FAILURE_CATEGORIES,
 )
+import httpx
+from app.services.document_parser import DocumentParseError
 from app.schemas.paper import PaperRetrievalStatus
 from app.schemas.verification import LiveFailureCategory
 from app.services.document_retriever import (
@@ -90,6 +94,16 @@ class TestClassifyException:
     def test_llm_unavailable(self) -> None:
         exc = LLMUnavailableError("LLM unavailable")
         assert classify_exception(exc) == LiveFailureCategory.LLM_FAILURE
+
+    def test_document_parse_error(self) -> None:
+        exc = DocumentParseError("Failed to parse document")
+        assert classify_exception(exc) == LiveFailureCategory.INVALID_DOCUMENT
+
+    def test_httpx_status_error(self) -> None:
+        req = httpx.Request("GET", "https://example.com")
+        res = httpx.Response(403, request=req)
+        exc = httpx.HTTPStatusError("403 Forbidden", request=req, response=res)
+        assert classify_exception(exc) == LiveFailureCategory.HTTP_403
 
     def test_unknown_exception(self) -> None:
         exc = ValueError("Unknown error")
@@ -204,3 +218,11 @@ class TestConstants:
     def test_retryable_categories_are_valid(self) -> None:
         for category in RETRYABLE_CATEGORIES:
             assert isinstance(category, LiveFailureCategory)
+
+    def test_retrieval_and_verification_categories_partition(self) -> None:
+        """Test that retrieval and verification categories partition failure types."""
+        assert len(RETRIEVAL_FAILURE_CATEGORIES.intersection(VERIFICATION_FAILURE_CATEGORIES)) == 0
+        assert LiveFailureCategory.DOI_NOT_FOUND in RETRIEVAL_FAILURE_CATEGORIES
+        assert LiveFailureCategory.ANTI_BOT_BLOCKED in RETRIEVAL_FAILURE_CATEGORIES
+        assert LiveFailureCategory.LLM_FAILURE in VERIFICATION_FAILURE_CATEGORIES
+        assert LiveFailureCategory.LLM_QUOTA_EXCEEDED in VERIFICATION_FAILURE_CATEGORIES

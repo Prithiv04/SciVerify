@@ -15,6 +15,7 @@ from app.schemas.verification import (
     Verdict,
     VerificationResponse,
 )
+from app.services.document_parser import DocumentParseError
 from app.services.document_retriever import InterstitialPageError, PaywallError
 from app.services.llm.provider import (
     LLMProviderError,
@@ -48,6 +49,29 @@ DETERMINISTIC_FAILURE_CATEGORIES = {
     LiveFailureCategory.INVALID_DOCUMENT,
     LiveFailureCategory.HTTP_404,
     LiveFailureCategory.INVALID_RESPONSE,
+}
+
+# Retrieval/infrastructure failure categories that skip evaluation
+RETRIEVAL_FAILURE_CATEGORIES = {
+    LiveFailureCategory.DOI_NOT_FOUND,
+    LiveFailureCategory.FULL_TEXT_UNAVAILABLE,
+    LiveFailureCategory.ANTI_BOT_BLOCKED,
+    LiveFailureCategory.PAYWALLED,
+    LiveFailureCategory.HTTP_403,
+    LiveFailureCategory.HTTP_404,
+    LiveFailureCategory.RATE_LIMITED,
+    LiveFailureCategory.INVALID_DOCUMENT,
+    LiveFailureCategory.NETWORK_TIMEOUT,
+    LiveFailureCategory.NETWORK_ERROR,
+}
+
+# Verification failure categories that represent actual system failures
+VERIFICATION_FAILURE_CATEGORIES = {
+    LiveFailureCategory.LLM_FAILURE,
+    LiveFailureCategory.LLM_QUOTA_EXCEEDED,
+    LiveFailureCategory.LLM_TIMEOUT,
+    LiveFailureCategory.INVALID_RESPONSE,
+    LiveFailureCategory.UNKNOWN_FAILURE,
 }
 
 T = TypeVar("T")
@@ -106,6 +130,8 @@ def classify_exception(exc: Exception) -> LiveFailureCategory:
         return LiveFailureCategory.ANTI_BOT_BLOCKED
     if isinstance(exc, PaywallError):
         return LiveFailureCategory.PAYWALLED
+    if isinstance(exc, DocumentParseError):
+        return LiveFailureCategory.INVALID_DOCUMENT
     if isinstance(exc, DocumentRetrievalError):
         # Check if it's an HTTP error
         msg = str(exc).lower()
@@ -125,6 +151,8 @@ def classify_exception(exc: Exception) -> LiveFailureCategory:
         if "unavailable" in msg:
             return LiveFailureCategory.NETWORK_ERROR
         return LiveFailureCategory.NETWORK_ERROR
+    if isinstance(exc, httpx.HTTPStatusError):
+        return classify_http_status(exc.response.status_code)
     if isinstance(exc, httpx.TimeoutException):
         return LiveFailureCategory.NETWORK_TIMEOUT
     if isinstance(exc, httpx.RequestError):
@@ -267,12 +295,14 @@ def evaluate_live_case(
     except Exception as exc:
         failure_category = classify_exception(exc)
         failure_reason = str(exc)
+        status = "skipped" if failure_category in RETRIEVAL_FAILURE_CATEGORIES else "failed"
         # For deterministic failures, attempts is already set to 1 by execute_with_retry
         # For other failures, we need to track the actual attempts
         retrieval_attempts = max_retries + 1 if failure_category not in DETERMINISTIC_FAILURE_CATEGORIES else 1
         logger.error(
-            "Case %s failed after %d attempts: category=%s reason=%s",
+            "Case %s %s after %d attempts: category=%s reason=%s",
             case.id,
+            status,
             retrieval_attempts,
             failure_category,
             failure_reason,
@@ -306,5 +336,7 @@ __all__ = [
     "LiveEvaluationMetrics",
     "MAX_RETRIES",
     "RETRYABLE_CATEGORIES",
+    "RETRIEVAL_FAILURE_CATEGORIES",
     "should_retry",
+    "VERIFICATION_FAILURE_CATEGORIES",
 ]
