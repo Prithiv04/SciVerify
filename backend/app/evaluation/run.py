@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     from dotenv import load_dotenv
@@ -264,7 +264,7 @@ def _run_live_evaluation(
             "run_id": str(uuid.uuid4()),
             "completed_case_ids": [],
             "failed_cases": {},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         if checkpoint_path:
             save_checkpoint(checkpoint_state, checkpoint_path)

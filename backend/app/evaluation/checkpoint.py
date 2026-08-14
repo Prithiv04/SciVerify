@@ -1,7 +1,8 @@
 import json
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+
 from typing import List, Dict, Any
 
 
@@ -25,7 +26,7 @@ def load_checkpoint(checkpoint_path: Path) -> Dict[str, Any]:
             "run_id": str(uuid.uuid4()),
             "completed_case_ids": [],
             "failed_cases": {},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     with checkpoint_path.open("r", encoding="utf-8") as f:
         data = json.load(f)

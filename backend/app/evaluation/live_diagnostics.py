@@ -162,6 +162,8 @@ def classify_exception(exc: Exception) -> LiveFailureCategory:
         msg = str(exc).lower()
         if "quota" in msg or "limit" in msg:
             return LiveFailureCategory.LLM_QUOTA_EXCEEDED
+        if "tokens per day" in msg or "tpd" in msg:
+            return LiveFailureCategory.LLM_QUOTA_EXCEEDED
         if "timed out" in msg or "timeout" in msg:
             return LiveFailureCategory.LLM_TIMEOUT
         return LiveFailureCategory.LLM_FAILURE

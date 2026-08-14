@@ -155,3 +155,4 @@ env/
 # Test/cache (Python)
 .pytest_cache/
 .coverage
+backend/evaluation/checkpoints/
