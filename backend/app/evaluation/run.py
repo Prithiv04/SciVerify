@@ -4,6 +4,9 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import time
+import uuid
+from datetime import datetime
 
 try:
     from dotenv import load_dotenv
@@ -19,7 +22,7 @@ from app.evaluation.live_diagnostics import (
     DETERMINISTIC_FAILURE_CATEGORIES,
     LiveCaseResult,
     LiveEvaluationMetrics,
-    RETRIEVAL_FAILURE_CATEGORIES,
+    LiveFailureCategory,
 )
 from app.evaluation.regression import (
     aggregate_to_baseline_payload,
@@ -92,6 +95,23 @@ def build_parser() -> argparse.ArgumentParser:
             "Requires health check data to be available."
         ),
     )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=Path,
+        default=default_results_dir() / "checkpoints",
+        help="Directory to save/load evaluation checkpoints.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume live evaluation from checkpoint in --checkpoint-dir.",
+    )
+    parser.add_argument(
+        "--quota-pause-seconds",
+        type=int,
+        default=0,
+        help="Seconds to pause between live evaluations to respect rate limits.",
+    )
     return parser
 
 
@@ -107,7 +127,13 @@ def main(argv: list[str] | None = None) -> int:
             "WARNING: Live evaluation may retrieve papers and call configured LLM providers.",
             file=sys.stderr,
         )
-        result = _run_live_evaluation(args.dataset, args.skip_unhealthy)
+        result = _run_live_evaluation(
+            args.dataset,
+            skip_unhealthy=args.skip_unhealthy,
+            checkpoint_dir=args.checkpoint_dir,
+            resume=args.resume,
+            quota_pause_seconds=args.quota_pause_seconds,
+        )
     else:
         result = load_and_evaluate_offline(args.dataset, args.fixtures_dir)
         result = type(result)(
@@ -182,7 +208,13 @@ def _run_health_check(dataset_path: Path) -> int:
     return 0
 
 
-def _run_live_evaluation(dataset_path: Path, skip_unhealthy: bool = False):
+def _run_live_evaluation(
+    dataset_path: Path,
+    skip_unhealthy: bool = False,
+    checkpoint_dir: Path | None = None,
+    resume: bool = False,
+    quota_pause_seconds: int = 0,
+):
     from app.evaluation.dataset_loader import is_placeholder_doi, validate_live_eligibility
     from app.evaluation.evaluator import EvaluationResult, evaluate_case
     from app.evaluation.live_diagnostics import evaluate_live_case, LiveCaseResult, LiveEvaluationMetrics, MAX_RETRIES
@@ -215,56 +247,86 @@ def _run_live_evaluation(dataset_path: Path, skip_unhealthy: bool = False):
         case for case in dataset.cases
         if case.live_evaluable and (not skip_unhealthy or case.id not in unhealthy_case_ids)
     ]
-    total_cases = len(dataset.cases)
-    live_eligible_count = len(live_eligible_cases)
-
-    print(f"Live evaluation", file=sys.stderr)
-    print(f"----------------", file=sys.stderr)
-    print(f"Dataset cases:       {total_cases}", file=sys.stderr)
-    print(f"Live eligible:       {live_eligible_count}", file=sys.stderr)
-    print(f"Not live eligible:   {total_cases - live_eligible_count}", file=sys.stderr)
-    print("", file=sys.stderr)
-
+    
+    # Initialize checkpoint handling
+    from app.evaluation.checkpoint import load_checkpoint, save_checkpoint
+    checkpoint_path = (checkpoint_dir / "live_checkpoint.json") if checkpoint_dir else None
+    if checkpoint_path:
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Load or initialize checkpoint state
+    if resume and checkpoint_path and checkpoint_path.exists():
+        checkpoint_state = load_checkpoint(checkpoint_path)
+        completed_ids = set(checkpoint_state.get("completed_case_ids", []))
+        print(f"Resuming from checkpoint with {len(completed_ids)} completed cases.", file=sys.stderr)
+    else:
+        checkpoint_state = {
+            "run_id": str(uuid.uuid4()),
+            "completed_case_ids": [],
+            "failed_cases": {},
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+        if checkpoint_path:
+            save_checkpoint(checkpoint_state, checkpoint_path)
+        completed_ids = set()
+    
     cases = []
     skipped: list[str] = []
-    skip_reasons: dict[str, int] = {}
     responses_by_id: dict = {}
     live_case_results: list[LiveCaseResult] = []
+    live_metrics = LiveEvaluationMetrics()
+    live_metrics.live_eligible_count = len(live_eligible_cases)
+    skip_reasons: dict[str, int] = {}
     failure_category_counts: dict[str, int] = {}
 
-    # Initialize live metrics
-    live_metrics = LiveEvaluationMetrics()
-    live_metrics.live_eligible_count = live_eligible_count
-
     for case in live_eligible_cases:
+        if case.id in completed_ids:
+            continue
+            
+        if quota_pause_seconds > 0:
+            time.sleep(quota_pause_seconds)
+            
         live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
         live_case_results.append(live_result)
         live_metrics.total_retrieval_attempts += live_result.retrieval_attempts
         live_metrics.total_elapsed_seconds += live_result.elapsed_seconds
 
         if live_result.status == "evaluated" and response is not None:
-            # Successfully evaluated - use the response
             responses_by_id[case.id] = response
             cases.append(evaluate_case(case.id, case.expected_verdict, response))
             live_metrics.successfully_evaluated_count += 1
+            # Update checkpoint with successful case
+            checkpoint_state["completed_case_ids"].append(case.id)
+            if checkpoint_path:
+                save_checkpoint(checkpoint_state, checkpoint_path)
         else:
-            # Failed or skipped - determine if it's a retrieval failure
             skipped.append(case.id)
             if live_result.failure_category:
                 category_name = live_result.failure_category.value
                 failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
                 live_metrics.failure_category_counts[category_name] += 1
-
-                # Check if this is a retrieval/infrastructure failure
                 if live_result.failure_category in RETRIEVAL_FAILURE_CATEGORIES:
                     live_metrics.retrieval_failure_count += 1
                     skip_reasons[f"retrieval_{category_name}"] = skip_reasons.get(f"retrieval_{category_name}", 0) + 1
                 else:
-                    # Verification failure (LLM failure, etc.)
                     live_metrics.verification_failure_count += 1
                     skip_reasons[f"verification_{category_name}"] = skip_reasons.get(f"verification_{category_name}", 0) + 1
 
                 print(f"Skipped live case {case.id}: {live_result.failure_category.value} - {live_result.failure_reason}", file=sys.stderr)
+                # Record failure in checkpoint state
+                checkpoint_state["failed_cases"][case.id] = {
+                    "category": category_name,
+                    "reason": live_result.failure_reason,
+                }
+                if checkpoint_path:
+                    save_checkpoint(checkpoint_state, checkpoint_path)
+                # Handle quota exceeded abort
+                if live_result.failure_category == LiveFailureCategory.LLM_QUOTA_EXCEEDED:
+                    if quota_pause_seconds > 0:
+                        print(f"Pausing {quota_pause_seconds}s due to quota limit...", file=sys.stderr)
+                        time.sleep(quota_pause_seconds)
+                    print("Aborting live evaluation due to LLM quota limit.", file=sys.stderr)
+                    return 1
             else:
                 skip_reasons["unknown"] = skip_reasons.get("unknown", 0) + 1
                 print(f"Skipped live case {case.id}: unknown reason", file=sys.stderr)
