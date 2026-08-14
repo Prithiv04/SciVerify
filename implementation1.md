@@ -1,383 +1,590 @@
-# Phase 14 — Real-Paper Evidence Pipeline Diagnostics & Verification Quality
+# SciVerify — Phase 15: Live LLM Verification Validation & Accuracy Benchmark
 
 ## Objective
 
-Diagnose why SciVerify achieves **100% retrieval success but only 6.7% live verdict accuracy** on the 15 healthy real-paper benchmark cases.
+Validate SciVerify's **complete live verification pipeline** using a real configured LLM provider against the benchmark's healthy real-paper cases.
 
-The live evaluation currently shows:
+Phase 14 fixed the live evaluation status-handling bug. Phase 15 must now determine the **actual live verification quality** when retrieval succeeds and an LLM is available.
 
-* 15/15 cases successfully retrieved
-* 0 retrieval/infrastructure failures
-* 14/15 incorrect verdicts
-* 0% evidence coverage
-* 0% traceability coverage
-* 100% unsupported segments
-* Average evidence relevance: 0.17
-* Average claim overlap: 0.15
+The goal is to measure:
 
-The immediate goal is to identify the exact stage where useful evidence is lost before changing production verification logic.
+* Real live verdict accuracy
+* Evidence retrieval quality
+* Claim/evidence overlap
+* Traceability coverage
+* Agent agreement
+* Confidence quality
+* LLM failure rate
+* Retrieval failure rate
+* Per-case live diagnostics
 
----
-
-## Phase 1 — Freeze Current Baseline
-
-Before modifying behavior:
-
-1. Preserve the current Phase 13 implementation.
-2. Do not modify:
-
-   * `baseline.json`
-   * offline fixtures
-   * offline evaluation behavior
-   * verdict definitions
-3. Record the current live benchmark result as the diagnostic baseline:
-
-   * 15 evaluated
-   * 6.7% accuracy
-   * 0% evidence coverage
-   * 0% traceability coverage
-4. Run:
-   `python -m pytest -q`
-5. Run:
-   `python -m app.evaluation.run`
-
-Expected:
-
-* Existing tests pass.
-* Offline evaluation remains 30/30 and 100%.
+Do **not** modify the production verification logic merely to improve benchmark numbers.
 
 ---
 
-## Phase 2 — Add Evidence Pipeline Diagnostics
+## Current Known State
 
-Create a diagnostic layer that does NOT change the production verdict logic.
+Offline evaluation:
 
-For every live benchmark case capture:
+* 30 cases
+* 30 evaluated
+* 100% verdict accuracy
+* All five verdict categories pass
+* Regression: PASS
 
-### Document diagnostics
+Live health check:
 
-* DOI
-* paper title
-* resolved source
-* document URL
-* document type
-* downloaded document size
-* extracted text length
-* extraction success/failure
-* number of pages when available
+* Total cases: 30
+* Healthy: 15
+* Unindexed: 11
+* Paywalled: 4
 
-### Chunk diagnostics
+Current live evaluation without an LLM:
 
-* total chunks generated
-* minimum/maximum/average chunk length
-* chunks containing claim keywords
-* chunks containing important entities/numbers from the claim
+* Live eligible: 15
+* Successfully evaluated: 0
+* Retrieval/infrastructure failures: 2
+* LLM failures: 13
+* LLM provider is not configured
 
-### Evidence retrieval diagnostics
-
-Capture the top evidence candidates before final filtering:
-
-* rank
-* evidence text
-* relevance score
-* claim overlap score
-* source metadata
-* retrieval method
-* whether candidate survived filtering
-
-### Traceability diagnostics
-
-Capture:
-
-* claim segments
-* matched evidence IDs
-* supported segments
-* partial segments
-* unsupported segments
-* contradicted segments
-
-### Verification diagnostics
-
-Capture the information actually passed to the agents:
-
-* claim
-* evidence
-* citation metadata
-* retrieved context length
-* agent outputs
-* final adjudicator input
-* final verdict
-
-Do not change the agents or verdict logic in this phase.
+Therefore, the current live accuracy result must **not** be interpreted as verification accuracy because no successful live verification occurred.
 
 ---
 
-## Phase 3 — Create Diagnostic Report
+# Phase 15 Scope
 
-Add a dedicated report for live evidence quality.
+## Step 1 — Verify Git State
+
+Before modifying code:
+
+```powershell
+cd C:\Users\shaki\OneDrive\Desktop\SciVerify
+
+git status
+git log -1 --oneline
+git branch -vv
+```
+
+Confirm the Phase 14 commit is pushed to `origin/main`.
+
+Do not overwrite or reset existing work.
+
+---
+
+# Step 2 — Configure a Real LLM Provider
+
+Use the existing LLM abstraction already present in the project.
+
+Do NOT redesign the LLM architecture.
+
+Do NOT hard-code API keys.
+
+Do NOT commit secrets.
+
+Use the existing environment-variable mechanism.
+
+Verify the provider configuration expected by the project, including:
+
+```text
+LLM_PROVIDER
+LLM_API_KEY
+```
+
+and any existing provider/model configuration already supported by SciVerify.
+
+If `.env.example` needs documentation updates, modify only the example configuration and never add real credentials.
+
+Add or update `.gitignore` protections if necessary to ensure secrets cannot be committed.
+
+---
+
+# Step 3 — Validate LLM Connectivity
+
+Before running the entire benchmark, verify that the configured provider can successfully answer through SciVerify's existing LLM abstraction.
+
+Use the existing application path.
+
+Do not bypass:
+
+* agents
+* verification_service
+* evidence retrieval
+* validation
+* traceability
+* existing prompts
+
+The test must exercise the real verification pipeline.
+
+If the LLM cannot be reached, stop and report the configuration/provider failure rather than modifying verification logic.
+
+---
+
+# Step 4 — Run Live Health Check
+
+Run:
+
+```powershell
+cd C:\Users\shaki\OneDrive\Desktop\SciVerify\backend
+
+python -m app.evaluation.run --live-health-check
+```
+
+Record:
+
+* Total cases
+* Healthy cases
+* Unindexed cases
+* Paywalled cases
+* Blocked cases
+* Unknown cases
+
+Do not automatically replace benchmark DOIs.
+
+---
+
+# Step 5 — Run Live Evaluation
+
+Run:
+
+```powershell
+python -m app.evaluation.run --live --skip-unhealthy
+```
+
+This should evaluate only the healthy/live-eligible cases.
+
+Record:
+
+```text
+Live eligible
+Successfully evaluated
+Retrieval/infrastructure failures
+Verification failures
+Skipped
+```
+
+Also record:
+
+```text
+Retrieval success rate
+Retrieval failure rate
+Total retrieval attempts
+Average attempts per case
+Total elapsed time
+```
+
+---
+
+# Step 6 — Analyze Successful Live Cases
+
+For every case with:
+
+```text
+status = evaluated
+```
+
+inspect:
+
+* expected verdict
+* actual verdict
+* confidence
+* evidence count
+* evidence relevance
+* claim overlap
+* evidence coverage
+* traceability coverage
+* agent agreement
+* validation status
+
+Create a per-case diagnostic table in the generated report if the existing reporting system supports it.
+
+Do not modify verdict logic to force benchmark agreement.
+
+---
+
+# Step 7 — Separate Failure Classes
+
+Live failures must remain separated into:
+
+### Retrieval/infrastructure failures
+
+Examples:
+
+* DOI_NOT_FOUND
+* FULL_TEXT_UNAVAILABLE
+* PAYWALLED
+* ANTI_BOT_BLOCKED
+* HTTP_403
+* HTTP_404
+* RATE_LIMITED
+* INVALID_DOCUMENT
+* NETWORK_TIMEOUT
+* NETWORK_ERROR
+
+### Verification failures
+
+Examples:
+
+* LLM_FAILURE
+* LLM_QUOTA_EXCEEDED
+* LLM_TIMEOUT
+* INVALID_RESPONSE
+* UNKNOWN_FAILURE
+
+### Successful verification
+
+Only cases with:
+
+```text
+VerificationStatus.SUCCESS
+```
+
+should contribute to live verdict accuracy.
+
+Do not count retrieval failures as wrong verdicts.
+
+Do not count LLM failures as wrong verdicts.
+
+---
+
+# Step 8 — Validate the Phase 14 Fix
+
+Specifically verify that the previous false-negative behavior is gone.
+
+Previously:
+
+```text
+INSUFFICIENT_EVIDENCE
+        ↓
+incorrectly counted as WRONG VERDICT
+```
+
+It must now behave as:
+
+```text
+INSUFFICIENT_EVIDENCE
+        ↓
+skipped / retrieval failure
+        ↓
+not included in verdict accuracy
+```
+
+Similarly:
+
+```text
+LLM_UNAVAILABLE
+LLM_TIMEOUT
+VERIFICATION_FAILED
+        ↓
+verification failure
+        ↓
+not counted as wrong verdict
+```
+
+---
+
+# Step 9 — Investigate Actual Wrong Verdicts
+
+Only if there are successfully evaluated cases with incorrect verdicts:
+
+```text
+status = evaluated
+actual_verdict != expected_verdict
+```
+
+investigate them.
+
+For each wrong case determine which layer is responsible:
+
+1. Paper retrieval
+2. Document parsing
+3. Chunking
+4. Evidence retrieval
+5. Evidence ranking
+6. Claim decomposition
+7. Prosecutor agent
+8. Defender agent
+9. Adjudicator agent
+10. Traceability
+11. Validation
+12. Final verdict mapping
+
+Do not immediately modify the responsible component.
+
+First produce evidence showing the root cause.
+
+---
+
+# Step 10 — Compare Live vs Offline Results
+
+Create a comparison:
+
+| Metric                |          Offline |                    Live |
+| --------------------- | ---------------: | ----------------------: |
+| Cases                 |               30 | healthy evaluated count |
+| Verdict accuracy      |             100% |                measured |
+| Evidence coverage     |            56.7% |                measured |
+| Traceability coverage |            48.9% |                measured |
+| Agent agreement       |            85.7% |                measured |
+| Confidence            | 0.70 correct avg |                measured |
+| Retrieval failures    |              N/A |                measured |
+| LLM failures          |              N/A |                measured |
+
+Important:
+
+Offline results must remain unchanged.
+
+Do not modify:
+
+* `baseline.json`
+* offline fixtures
+* dataset schema for the purpose of improving scores
+* offline evaluation logic
+
+---
+
+# Step 11 — Improve Metrics Only If a Real Bug Exists
+
+If metrics are incorrect, fix only the measurement/reporting bug.
+
+Examples:
+
+* Retrieval success incorrectly counted
+* LLM failure incorrectly counted as retrieval failure
+* Skipped case incorrectly included in accuracy denominator
+* Successful case incorrectly omitted
+* Per-case diagnostics incorrectly reported
+
+Do NOT change scoring definitions simply because the live result is low.
+
+---
+
+# Step 12 — Tests
+
+Add tests only for bugs or behavior discovered during Phase 15.
+
+Required regression coverage:
+
+### LLM configuration
+
+Test that missing provider configuration produces a structured LLM failure.
+
+### Successful LLM response
+
+Test that a successful verification response is:
+
+```text
+status = evaluated
+```
+
+and contributes to live metrics.
+
+### LLM failure
+
+Test that:
+
+```text
+LLM_UNAVAILABLE
+LLM_TIMEOUT
+VERIFICATION_FAILED
+```
+
+are classified as verification failures and not wrong verdicts.
+
+### Retrieval failure
+
+Ensure retrieval failures remain excluded from verdict accuracy.
+
+### Accuracy denominator
+
+Ensure only successfully evaluated cases contribute to live verdict accuracy.
+
+---
+
+# Step 13 — Required Validation
+
+Run all of the following:
+
+```powershell
+python -m pytest -q
+```
+
+Then:
+
+```powershell
+python -m app.evaluation.run
+```
+
+Then:
+
+```powershell
+python -m app.evaluation.run --live-health-check
+```
+
+Then, with the LLM configured:
+
+```powershell
+python -m app.evaluation.run --live --skip-unhealthy
+```
+
+Expected minimum:
+
+* All tests pass
+* Offline evaluation remains 30/30
+* Offline accuracy remains 100%
+* Regression remains PASS
+* Live evaluation produces actual evaluated cases when the LLM is configured
+* Retrieval failures remain separated
+* LLM failures remain separated
+* No secrets are committed
+
+---
+
+# Step 14 — Do Not Change These Components Unless a Proven Bug Requires It
+
+Preserve:
+
+```text
+verification_service.py
+services/agents/
+evidence_retriever.py
+claim_traceability.py
+verification_validator.py
+metrics.py
+failure_analysis.py
+fixture_factory.py
+evaluation/fixtures/
+baseline.json
+frontend/
+```
+
+Do not alter agent prompts or verdict rules merely to increase live benchmark accuracy.
+
+---
+
+# Step 15 — Reporting
+
+At completion, provide an exact report containing:
+
+## Files Changed
+
+List every modified/created file.
+
+## Tests
 
 Example:
 
 ```text
-Live Evidence Diagnostic Report
-================================
-
-Cases analyzed: 15
-
-Document extraction:
-- Successful: 15
-- Failed: 0
-
-Chunking:
-- Average chunks/case: X
-- Average text length: X
-
-Evidence retrieval:
-- Cases with useful evidence: X/15
-- Average top-5 relevance: X
-- Average claim overlap: X
-- Evidence coverage: X%
-
-Traceability:
-- Linked segments: X%
-- Unsupported segments: X%
-
-Verification:
-- Correct: 1
-- Incorrect: 14
-
-Pipeline bottleneck:
-- DOCUMENT_EXTRACTION
-- CHUNKING
-- EVIDENCE_RETRIEVAL
-- CLAIM_MATCHING
-- TRACEABILITY
-- AGENT_INPUT
-- VERDICT
+pytest:
+XXX passed
 ```
 
-The report must identify the likely bottleneck using measured data rather than assumptions.
+## Offline Evaluation
 
----
-
-## Phase 4 — Inspect Existing Production Components
-
-Read-only inspection first.
-
-Inspect:
-
-* `backend/app/services/paper_retriever.py`
-* `backend/app/services/document_retriever.py`
-* `backend/app/services/evidence_retriever.py`
-* `backend/app/services/evidence_pipeline.py`
-* `backend/app/services/claim_traceability.py`
-* `backend/app/services/agents/`
-* `backend/app/services/verification_validator.py`
-
-Determine:
-
-1. Whether real-paper text is actually reaching the evidence retriever.
-2. Whether extracted text is malformed, truncated, or excessively noisy.
-3. Whether chunking produces useful scientific passages.
-4. Whether retrieval scores are too low because of query construction.
-5. Whether relevant evidence is being filtered out.
-6. Whether traceability expects metadata that real retrieved evidence does not contain.
-7. Whether agents receive the retrieved evidence correctly.
-8. Whether the final verdict is being produced from empty/weak evidence.
-
-Do not modify these components during inspection.
-
----
-
-## Phase 5 — Diagnose the 15 Real Cases
-
-Generate a per-case diagnostic table.
-
-Required fields:
-
-| Case | Expected | Actual | Text Length | Chunks | Top Evidence | Relevance | Claim Overlap | Evidence Coverage | Traceability |
-| ---- | -------- | ------ | ----------: | -----: | ------------ | --------: | ------------: | ----------------: | -----------: |
-
-Categorize each case into one primary bottleneck:
-
-* `DOCUMENT_EXTRACTION_FAILURE`
-* `CHUNKING_FAILURE`
-* `QUERY_CONSTRUCTION_FAILURE`
-* `EVIDENCE_RETRIEVAL_FAILURE`
-* `EVIDENCE_FILTERING_FAILURE`
-* `TRACEABILITY_FAILURE`
-* `AGENT_CONTEXT_FAILURE`
-* `VERDICT_REASONING_FAILURE`
-* `UNKNOWN`
-
-A case must not be classified as a verdict reasoning failure if useful evidence never reached the agents.
-
----
-
-## Phase 6 — Identify the Root Cause
-
-After diagnostics, determine the dominant failure.
-
-Examples:
-
-### If extracted text is poor
-
-Fix document extraction/chunking only.
-
-### If relevant chunks exist but retrieval misses them
-
-Investigate query construction and evidence retrieval.
-
-### If relevant evidence is retrieved but discarded
-
-Fix evidence filtering/ranking.
-
-### If evidence reaches agents but traceability is zero
-
-Fix the evidence-to-claim linking layer.
-
-### If agents receive strong evidence but still produce incorrect verdicts
-
-Only then investigate agent/verdict reasoning.
-
-Do NOT make multiple unrelated changes simultaneously.
-
----
-
-## Phase 7 — Targeted Fix
-
-Implement only the fix supported by the diagnostic results.
-
-Constraints:
-
-* Preserve existing offline behavior.
-* Preserve benchmark fixtures.
-* Preserve verdict categories.
-* Preserve Phase 13 diagnostics.
-* Do not bypass access controls.
-* Do not add unnecessary LLM calls.
-* Do not modify `baseline.json`.
-* Do not modify the frontend.
-* Maintain backward compatibility.
-
-Every production change must have a regression test.
-
----
-
-## Phase 8 — Re-run Offline Regression
-
-Run:
-
-```bash
-python -m pytest -q
-python -m app.evaluation.run
+```text
+Cases: 30
+Accuracy: 100.0%
+Regression: PASS
 ```
 
-Verify:
+## Live Health Check
 
-* All tests pass.
-* Offline dataset remains 30 cases.
-* Offline verdict accuracy remains 100%.
-* Existing metrics do not regress.
-* Baseline remains unchanged.
-
-If offline behavior changes, stop and fix the regression before continuing.
-
----
-
-## Phase 9 — Re-run Real Live Benchmark
-
-Run:
-
-```bash
-python -m app.evaluation.run --live --skip-unhealthy
+```text
+Healthy:
+Unindexed:
+Paywalled:
+Blocked:
+Unknown:
 ```
 
-Compare against the Phase 14 baseline:
+## Live Evaluation
 
-| Metric            | Before | After |
-| ----------------- | -----: | ----: |
-| Live cases        |     15 |     — |
-| Verdict accuracy  |   6.7% |     — |
-| Evidence coverage |     0% |     — |
-| Traceability      |     0% |     — |
-| Avg relevance     |   0.17 |     — |
-| Avg claim overlap |   0.15 |     — |
-| Retrieval success |   100% |     — |
-
-The objective is measurable improvement, not merely passing tests.
-
----
-
-## Phase 10 — Acceptance Criteria
-
-Phase 14 is complete only when:
-
-1. The root cause of the 6.7% live accuracy is identified with evidence.
-2. Per-case evidence diagnostics are available.
-3. The diagnostic report clearly identifies the bottleneck.
-4. A targeted fix is implemented only where justified.
-5. All automated tests pass.
-6. Offline evaluation remains unchanged.
-7. Baseline remains unchanged.
-8. Production verification behavior is changed only if the diagnostics demonstrate that it is necessary.
-9. Live evidence coverage improves from the current 0%.
-10. Live verdict accuracy improves from the current 6.7%, or a documented root cause explains why further improvement requires an external limitation.
-11. No paywalls, CAPTCHAs, or anti-bot protections are bypassed.
-12. Final results are documented with before/after metrics.
-
----
-
-## Files
-
-### Initially inspect
-
-* `backend/app/services/paper_retriever.py`
-* `backend/app/services/document_retriever.py`
-* `backend/app/services/evidence_retriever.py`
-* `backend/app/services/evidence_pipeline.py`
-* `backend/app/services/claim_traceability.py`
-* `backend/app/services/agents/`
-* `backend/app/services/verification_validator.py`
-
-### Potential new files
-
-* `backend/app/evaluation/live_evidence_diagnostics.py`
-* `backend/app/tests/test_live_evidence_diagnostics.py`
-
-Only modify production service files after the diagnostic phase identifies the actual bottleneck.
-
-### Must remain unchanged unless the root-cause analysis proves otherwise
-
-* `backend/evaluation/baseline.json`
-* `backend/evaluation/fixtures/`
-* offline evaluation logic
-* verdict definitions
-* frontend
-
----
-
-## Final Validation
-
-Run:
-
-```bash
-python -m pytest -q
-python -m app.evaluation.run
-python -m app.evaluation.run --live --skip-unhealthy
+```text
+Live eligible:
+Successfully evaluated:
+Retrieval/infrastructure failures:
+Verification failures:
+Skipped:
 ```
 
-Then report:
+## Live Quality
 
-* Exact files changed
-* Number of tests passed
-* Offline accuracy
-* Live accuracy
-* Evidence coverage before/after
-* Traceability before/after
-* Retrieval metrics before/after
-* Identified root cause
-* Implemented fix
-* Remaining limitations
+```text
+Verdict accuracy:
+Evidence coverage:
+Traceability coverage:
+Agent agreement:
+Average confidence:
+```
 
-Do not declare success based solely on test count. The real-paper benchmark must be evaluated.
+## Failure Categories
+
+List counts for each failure category.
+
+## Root Cause Findings
+
+If wrong verdicts exist, explain the actual responsible layer.
+
+If no successful live cases exist because of provider configuration, clearly state that live verification accuracy could not yet be measured.
+
+---
+
+# Phase 15 Success Criteria
+
+Phase 15 is complete when:
+
+1. A real LLM provider is successfully connected through the existing SciVerify pipeline.
+2. Healthy benchmark cases can execute through the complete live pipeline.
+3. Successful live cases are correctly counted as `evaluated`.
+4. Retrieval failures are excluded from verdict accuracy.
+5. LLM failures are excluded from verdict accuracy.
+6. Phase 14 status handling remains correct.
+7. Offline evaluation remains 30/30 with 100% accuracy.
+8. All automated tests pass.
+9. No production verification behavior is changed without a proven bug.
+10. No API keys or secrets are committed.
+11. Live verdict accuracy is measured from actual successful live cases.
+12. Any remaining accuracy problem has a documented root cause before further implementation.
+
+---
+
+# Important Rule
+
+Do NOT try to make the live benchmark reach 100% accuracy artificially.
+
+The purpose of Phase 15 is **measurement and root-cause discovery**.
+
+If live accuracy is low, document why first.
+
+Only after identifying a reproducible defect should a new Phase 16 implementation plan be created.
+
+---
+
+# Final Deliverable
+
+Produce:
+
+```text
+Phase 15 Live Validation Report
+```
+
+containing:
+
+* environment/provider status
+* health-check results
+* live evaluation results
+* successful case count
+* retrieval failure count
+* LLM failure count
+* verdict accuracy
+* evidence metrics
+* traceability metrics
+* agent agreement
+* confidence metrics
+* wrong-case analysis
+* regression status
+* files changed
+* test results
+* recommendation for Phase 16
+
+```
+```

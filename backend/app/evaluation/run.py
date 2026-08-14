@@ -5,6 +5,13 @@ import json
 import sys
 from pathlib import Path
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; rely on environment already being set
+
 from app.evaluation.dataset_loader import default_dataset_path, default_fixtures_dir, load_dataset
 from app.evaluation.evaluator import evaluate_offline_dataset, load_and_evaluate_offline
 from app.evaluation.io_paths import default_baseline_path, default_results_dir, write_json
