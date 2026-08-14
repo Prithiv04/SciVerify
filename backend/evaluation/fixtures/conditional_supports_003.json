@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The inhibitor reduces kinase activity when ATP is present.",
+  "claim": "Imatinib reduces BCR-ABL kinase activity when ATP is present in the binding pocket.",
   "verdict": "SUPPORTS",
   "confidence": 0.84,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Kinase activity decreased in the presence of ATP.",
+      "text": "Imatinib reduces BCR-ABL kinase activity when ATP is present in the binding pocket.",
       "relevance_score": 0.86,
       "claim_overlap": 0.83,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The inhibitor reduces kinase activity when ATP is present.",
+        "text": "Imatinib reduces BCR-ABL kinase activity when ATP is present in the binding pocket.",
         "status": "SUPPORTED",
         "coverage_score": 0.84,
         "evidence_ids": [

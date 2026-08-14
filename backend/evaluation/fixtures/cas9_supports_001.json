@@ -6,9 +6,9 @@
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {

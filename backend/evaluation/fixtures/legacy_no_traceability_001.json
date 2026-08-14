@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "Sample preparation improved reproducibility.",
+  "claim": "Improved sample preparation protocols enhanced reproducibility in mass spectrometry experiments.",
   "verdict": "SUPPORTS",
   "confidence": 0.82,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Sample preparation improved reproducibility in the protocol.",
+      "text": "Improved sample preparation protocols enhanced reproducibility in mass spectrometry experiments.",
       "relevance_score": 0.8,
       "claim_overlap": 0.78,
       "numeric_overlap": 0.0,

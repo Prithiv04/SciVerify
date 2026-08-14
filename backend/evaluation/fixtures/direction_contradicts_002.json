@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "Expression of the gene increases under stress.",
+  "claim": "Expression of the p53 tumor suppressor gene increases under DNA damage conditions.",
   "verdict": "CONTRADICTS",
   "confidence": 0.8,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Expression decreased under stress conditions.",
+      "text": "p53 protein accumulates under DNA damage, but gene expression may not increase.",
       "relevance_score": 0.83,
       "claim_overlap": 0.79,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "Expression of the gene increases under stress.",
+        "text": "Expression of the p53 tumor suppressor gene increases under DNA damage conditions.",
         "status": "CONTRADICTED",
         "coverage_score": 0.77,
         "evidence_ids": [

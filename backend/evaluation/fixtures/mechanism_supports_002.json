@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "RNA interference can silence target genes.",
+  "claim": "RNA interference can silence target genes through sequence-specific mRNA degradation.",
   "verdict": "SUPPORTS",
   "confidence": 0.85,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "RNA interference silences target genes in vitro.",
+      "text": "RNA interference silences target genes through sequence-specific mRNA degradation.",
       "relevance_score": 0.87,
       "claim_overlap": 0.84,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "RNA interference can silence target genes.",
+        "text": "RNA interference can silence target genes through sequence-specific mRNA degradation.",
         "status": "SUPPORTED",
         "coverage_score": 0.86,
         "evidence_ids": [

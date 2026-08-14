@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "A 10 mg dose reduced symptoms in the trial.",
+  "claim": "A 10 mg dose of atorvastatin reduced LDL cholesterol in the trial.",
   "verdict": "SUPPORTS",
   "confidence": 0.87,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "The 10 mg dose group showed reduced symptoms.",
+      "text": "The 10 mg dose of atorvastatin reduced LDL cholesterol in the trial.",
       "relevance_score": 0.88,
       "claim_overlap": 0.85,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "A 10 mg dose reduced symptoms in the trial.",
+        "text": "A 10 mg dose of atorvastatin reduced LDL cholesterol in the trial.",
         "status": "SUPPORTED",
         "coverage_score": 0.87,
         "evidence_ids": [

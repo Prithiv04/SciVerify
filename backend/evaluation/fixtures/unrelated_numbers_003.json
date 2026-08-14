@@ -1,28 +1,26 @@
 {
   "status": "success",
-  "claim": "The assay sensitivity is 98%.",
+  "claim": "The AlphaFold2 model sensitivity is 98%.",
   "verdict": "INSUFFICIENT",
   "confidence": 0.38,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "The cohort included 98 participants.",
+      "text": "The AlphaFold2 paper reports GDT-TS scores, not sensitivity metrics.",
       "relevance_score": 0.3,
       "claim_overlap": 0.12,
       "numeric_overlap": 0.0,
       "claim_numbers": [],
-      "evidence_numbers": [
-        "98"
-      ],
+      "evidence_numbers": [],
       "source_url": null,
       "page": null
     }
@@ -66,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The assay sensitivity is 98%.",
+        "text": "The AlphaFold2 model sensitivity is 98%.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.1,
         "evidence_ids": []

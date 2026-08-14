@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The intervention improves cognitive performance in elderly patients.",
+  "claim": "The CRISPR-Cas9 system improves cognitive performance in elderly patients.",
   "verdict": "INSUFFICIENT",
   "confidence": 0.4,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "The study measured sleep duration in elderly participants.",
+      "text": "The CRISPR-Cas9 system is used for genome editing, not cognitive enhancement.",
       "relevance_score": 0.35,
       "claim_overlap": 0.2,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The intervention improves cognitive performance in elderly patients.",
+        "text": "The CRISPR-Cas9 system improves cognitive performance in elderly patients.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.18,
         "evidence_ids": []

@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The study proves the drug is safe for long-term use.",
+  "claim": "The SPRINT trial proves that intensive blood pressure treatment is safe for all patients.",
   "verdict": "CONTRADICTS",
   "confidence": 0.83,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Serious adverse events were observed during follow-up.",
+      "text": "Serious adverse events were observed in the intensive treatment group during follow-up.",
       "relevance_score": 0.85,
       "claim_overlap": 0.81,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The study proves the drug is safe for long-term use.",
+        "text": "The SPRINT trial proves that intensive blood pressure treatment is safe for all patients.",
         "status": "CONTRADICTED",
         "coverage_score": 0.8,
         "evidence_ids": [

@@ -286,7 +286,7 @@
     ]
   },
   "regression": {
-    "passed": true,
+    "passed": null,
     "findings": []
   },
   "cases": [

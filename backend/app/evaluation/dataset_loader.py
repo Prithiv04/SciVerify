@@ -11,6 +11,15 @@ from app.utils.doi import InvalidDOIError, normalize_doi
 
 VALID_VERDICTS = {verdict.value for verdict in Verdict}
 
+# Known placeholder DOI patterns that should not be used for live evaluation
+PLACEHOLDER_DOI_PATTERNS = [
+    "10.1000/example",
+    "10.1000/benchmark",
+    "10.1000/placeholder",
+    "10.1000/fake",
+    "10.1000/test",
+]
+
 
 class BenchmarkCase(BaseModel):
     id: str
@@ -20,6 +29,7 @@ class BenchmarkCase(BaseModel):
     description: str
     expected_traceability_statuses: list[str] | None = None
     expected_min_evidence_count: int | None = None
+    live_evaluable: bool | None = None
 
     @field_validator("id", "claim", "description")
     @classmethod
@@ -35,6 +45,22 @@ class BenchmarkCase(BaseModel):
             return normalize_doi(value)
         except InvalidDOIError as exc:
             raise ValueError(str(exc)) from exc
+
+    @field_validator("live_evaluable")
+    @classmethod
+    def set_default_live_evaluable(cls, value: bool | None, info: Any) -> bool:
+        """Automatically determine live evaluable status based on DOI if not explicitly set."""
+        if value is not None:
+            return value
+        
+        doi = info.data.get("doi", "")
+        return not is_placeholder_doi(doi)
+
+
+def is_placeholder_doi(doi: str) -> bool:
+    """Check if a DOI matches known placeholder patterns."""
+    normalized_doi = doi.lower().strip()
+    return any(pattern in normalized_doi for pattern in PLACEHOLDER_DOI_PATTERNS)
 
 
 class BenchmarkDataset(BaseModel):
@@ -94,3 +120,25 @@ def validate_dataset_payload(payload: Any) -> BenchmarkDataset:
         raise DatasetValidationError("Dataset must contain at least one case.")
 
     return BenchmarkDataset(cases=cases)
+
+
+def validate_live_eligibility(dataset: BenchmarkDataset) -> list[str]:
+    """
+    Validate dataset for live evaluation and report placeholder DOIs.
+    
+    Returns a list of warning messages for cases that are not live-eligible.
+    """
+    warnings: list[str] = []
+    
+    for case in dataset.cases:
+        if not case.live_evaluable:
+            if is_placeholder_doi(case.doi):
+                warnings.append(
+                    f"Case {case.id} has a placeholder/non-live DOI ({case.doi}) and will not be used for live evaluation."
+                )
+            else:
+                warnings.append(
+                    f"Case {case.id} is marked as not live-evaluable and will be skipped during live evaluation."
+                )
+    
+    return warnings

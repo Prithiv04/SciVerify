@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The protein directly regulates the metabolic pathway.",
+  "claim": "The p53 protein directly regulates the glycolysis metabolic pathway.",
   "verdict": "INSUFFICIENT",
   "confidence": 0.44,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "The protein was detected in pathway-associated cells.",
+      "text": "The p53 protein was detected in cells involved in metabolism but direct regulation of glycolysis was not established.",
       "relevance_score": 0.45,
       "claim_overlap": 0.28,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The protein directly regulates the metabolic pathway.",
+        "text": "The p53 protein directly regulates the glycolysis metabolic pathway.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.22,
         "evidence_ids": []

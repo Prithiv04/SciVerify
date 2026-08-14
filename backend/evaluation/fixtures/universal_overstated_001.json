@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The therapy improves survival across all subgroups.",
+  "claim": "The SPRINT intensive blood pressure treatment improves survival across all patient subgroups.",
   "verdict": "OVERSTATED",
   "confidence": 0.76,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Survival improved in one predefined subgroup.",
+      "text": "Survival improved in some predefined subgroups but not uniformly across all.",
       "relevance_score": 0.7,
       "claim_overlap": 0.55,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The therapy improves survival",
+        "text": "The SPRINT intensive blood pressure treatment improves survival",
         "status": "PARTIALLY_SUPPORTED",
         "coverage_score": 0.58,
         "evidence_ids": [
@@ -73,7 +73,7 @@
       },
       {
         "id": "segment_2",
-        "text": "across all subgroups",
+        "text": "across all patient subgroups",
         "status": "UNSUPPORTED",
         "coverage_score": 0.12,
         "evidence_ids": []

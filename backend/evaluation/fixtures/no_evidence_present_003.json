@@ -1,14 +1,14 @@
 {
   "status": "success",
-  "claim": "The molecule binds irreversibly to the receptor.",
+  "claim": "The molecule binds irreversibly to the BCR-ABL kinase domain.",
   "verdict": "FABRICATED",
   "confidence": 0.66,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [],
   "prosecutor": {
@@ -46,7 +46,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The molecule binds irreversibly to the receptor.",
+        "text": "The molecule binds irreversibly to the BCR-ABL kinase domain.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.03,
         "evidence_ids": []

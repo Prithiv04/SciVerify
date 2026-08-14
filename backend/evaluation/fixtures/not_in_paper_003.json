@@ -1,14 +1,14 @@
 {
   "status": "success",
-  "claim": "The authors reported a phase III multicenter trial with 10,000 patients.",
+  "claim": "The authors reported a phase III multicenter trial with 10,000 patients in the original CRISPR-Cas9 paper.",
   "verdict": "FABRICATED",
   "confidence": 0.7,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [],
   "prosecutor": {
@@ -42,13 +42,13 @@
   "suggested_correction": null,
   "agent_agreement": true,
   "validation_warnings": [
-    "Claim references content not found in the cited paper."
+    "Claim references content not found in the cited paper. The original paper was an in vitro study."
   ],
   "claim_traceability": {
     "segments": [
       {
         "id": "segment_1",
-        "text": "The authors reported a phase III multicenter trial with 10,000 patients.",
+        "text": "The authors reported a phase III multicenter trial with 10,000 patients in the original CRISPR-Cas9 paper.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.04,
         "evidence_ids": []

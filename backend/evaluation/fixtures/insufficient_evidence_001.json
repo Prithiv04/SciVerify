@@ -1,14 +1,14 @@
 {
   "status": "insufficient_evidence",
-  "claim": "The dataset proves universal efficacy.",
+  "claim": "The ENCODE project proves that 80% of the human genome is functional.",
   "verdict": "INSUFFICIENT",
   "confidence": 0.0,
   "summary": "Insufficient evidence.",
   "reasoning": "Not enough evidence.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [],
   "prosecutor": null,
@@ -21,7 +21,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The dataset proves universal efficacy.",
+        "text": "The ENCODE project proves that 80% of the human genome is functional.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.0,
         "evidence_ids": []

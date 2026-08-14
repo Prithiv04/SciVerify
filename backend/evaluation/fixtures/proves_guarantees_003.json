@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The data proves the mechanism guarantees remission.",
+  "claim": "The AlphaFold2 data proves the mechanism guarantees perfect protein structure prediction.",
   "verdict": "OVERSTATED",
   "confidence": 0.73,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Remission was observed in a subset of participants.",
+      "text": "AlphaFold2 achieved high accuracy but the paper acknowledges limitations and does not guarantee perfection.",
       "relevance_score": 0.72,
       "claim_overlap": 0.52,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The data proves the mechanism guarantees remission.",
+        "text": "The AlphaFold2 data proves the mechanism guarantees perfect protein structure prediction.",
         "status": "PARTIALLY_SUPPORTED",
         "coverage_score": 0.48,
         "evidence_ids": [

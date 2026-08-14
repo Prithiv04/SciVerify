@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The treatment achieved an 87% five-year survival rate.",
+  "claim": "The SPRINT trial achieved an 87% five-year survival rate in the intensive treatment group.",
   "verdict": "FABRICATED",
   "confidence": 0.68,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Follow-up was conducted for twelve months.",
+      "text": "The SPRINT trial did not report this specific five-year survival rate.",
       "relevance_score": 0.25,
       "claim_overlap": 0.1,
       "numeric_overlap": 0.0,
@@ -66,7 +66,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The treatment achieved an 87% five-year survival rate.",
+        "text": "The SPRINT trial achieved an 87% five-year survival rate in the intensive treatment group.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.06,
         "evidence_ids": []

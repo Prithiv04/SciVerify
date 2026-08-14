@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "Resistance never develops under this regimen.",
+  "claim": "Resistance never develops under imatinib treatment regimen.",
   "verdict": "CONTRADICTS",
   "confidence": 0.8,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Resistance emerged in three of twelve treated lines.",
+      "text": "Resistance emerged in patients under imatinib treatment.",
       "relevance_score": 0.82,
       "claim_overlap": 0.76,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "Resistance never develops under this regimen.",
+        "text": "Resistance never develops under imatinib treatment regimen.",
         "status": "CONTRADICTED",
         "coverage_score": 0.77,
         "evidence_ids": [

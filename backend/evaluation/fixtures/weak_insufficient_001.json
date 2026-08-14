@@ -1,21 +1,21 @@
 {
   "status": "success",
-  "claim": "The compound fully eliminates tumors in every model.",
+  "claim": "The CRISPR-Cas9 system fully eliminates off-target effects in every tested cell line.",
   "verdict": "INSUFFICIENT",
   "confidence": 0.41,
   "summary": "Benchmark summary.",
   "reasoning": "Benchmark reasoning.",
   "paper": {
-    "paper_id": "10.1000/benchmark",
-    "doi": "10.1000/benchmark",
-    "title": "Benchmark Paper"
+    "paper_id": "10.1126/science.1225829",
+    "doi": "10.1126/science.1225829",
+    "title": "A programmable dual-RNA-guided DNA endonuclease in adaptive bacterial immunity"
   },
   "evidence": [
     {
       "chunk_id": "c1",
       "section": "Results",
       "chunk_index": 0,
-      "text": "Tumor volume decreased in one model.",
+      "text": "Off-target effects were observed in some cell lines.",
       "relevance_score": 0.22,
       "claim_overlap": 0.18,
       "numeric_overlap": 0.0,
@@ -64,7 +64,7 @@
     "segments": [
       {
         "id": "segment_1",
-        "text": "The compound fully eliminates tumors in every model.",
+        "text": "The CRISPR-Cas9 system fully eliminates off-target effects in every tested cell line.",
         "status": "UNSUPPORTED",
         "coverage_score": 0.15,
         "evidence_ids": []

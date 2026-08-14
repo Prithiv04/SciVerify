@@ -85,6 +85,15 @@ def main(argv: list[str] | None = None) -> int:
             skipped_case_ids=result.skipped_case_ids,
             responses_by_id=result.responses_by_id,
         )
+        
+        # Report offline evaluation statistics
+        dataset = load_dataset(args.dataset)
+        print(f"Offline evaluation", file=sys.stderr)
+        print(f"------------------", file=sys.stderr)
+        print(f"Dataset cases:       {len(dataset.cases)}", file=sys.stderr)
+        print(f"Evaluated:           {len(result.cases)}", file=sys.stderr)
+        print(f"Skipped:             {len(result.skipped_case_ids)}", file=sys.stderr)
+        print("", file=sys.stderr)
 
     regression = None
     if args.compare_baseline:
@@ -108,26 +117,69 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_live_evaluation(dataset_path: Path):
+    from app.evaluation.dataset_loader import is_placeholder_doi, validate_live_eligibility
     from app.evaluation.evaluator import EvaluationResult, evaluate_case
     from app.services.verification_service import analyze_verification
 
     dataset = load_dataset(dataset_path)
+    
+    # Validate live eligibility and report placeholder DOIs
+    eligibility_warnings = validate_live_eligibility(dataset)
+    if eligibility_warnings:
+        print("Live evaluation eligibility warnings:", file=sys.stderr)
+        for warning in eligibility_warnings:
+            print(f"  {warning}", file=sys.stderr)
+        print("", file=sys.stderr)
+    
+    # Filter to live-eligible cases only
+    live_eligible_cases = [case for case in dataset.cases if case.live_evaluable]
+    total_cases = len(dataset.cases)
+    live_eligible_count = len(live_eligible_cases)
+    
+    print(f"Live evaluation", file=sys.stderr)
+    print(f"----------------", file=sys.stderr)
+    print(f"Dataset cases:       {total_cases}", file=sys.stderr)
+    print(f"Live eligible:       {live_eligible_count}", file=sys.stderr)
+    print(f"Not live eligible:   {total_cases - live_eligible_count}", file=sys.stderr)
+    print("", file=sys.stderr)
+    
     cases = []
     skipped: list[str] = []
+    skip_reasons: dict[str, int] = {}
     responses_by_id: dict = {}
 
-    for case in dataset.cases:
+    for case in live_eligible_cases:
         try:
             response = analyze_verification(case.claim, case.doi)
             responses_by_id[case.id] = response
             cases.append(evaluate_case(case.id, case.expected_verdict, response))
         except Exception as exc:
+            reason = str(exc).split(":")[0] if ":" in str(exc) else "unknown"
+            skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
             print(f"Skipped live case {case.id}: {exc}", file=sys.stderr)
             skipped.append(case.id)
+    
+    # Also add non-live-eligible cases to skipped
+    for case in dataset.cases:
+        if not case.live_evaluable:
+            skipped.append(case.id)
+            if is_placeholder_doi(case.doi):
+                skip_reasons["Placeholder DOI"] = skip_reasons.get("Placeholder DOI", 0) + 1
+            else:
+                skip_reasons["Not live eligible"] = skip_reasons.get("Not live eligible", 0) + 1
 
     from app.evaluation.metrics import aggregate_case_metrics
 
     aggregate = aggregate_case_metrics(cases)
+    
+    print(f"Evaluated:           {len(cases)}", file=sys.stderr)
+    print(f"Skipped:             {len(skipped)}", file=sys.stderr)
+    if skip_reasons:
+        print(f"Skip reasons:", file=sys.stderr)
+        for reason, count in skip_reasons.items():
+            print(f"  - {reason}: {count}", file=sys.stderr)
+    print("", file=sys.stderr)
+    
     return EvaluationResult(
         dataset_path=dataset_path,
         cases=cases,
