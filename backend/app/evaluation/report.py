@@ -17,7 +17,7 @@ def build_report_payload(
     aggregate = result.aggregate
     failure_summary = analyze_failures(result.cases, result.responses_by_id)
 
-    return {
+    payload = {
         "dataset_path": str(result.dataset_path) if result.dataset_path else None,
         "cases_evaluated": aggregate.case_count,
         "skipped_case_ids": result.skipped_case_ids,
@@ -87,6 +87,12 @@ def build_report_payload(
         },
         "cases": [_case_payload(case) for case in result.cases],
     }
+
+    # Add live evaluation diagnostics if present
+    if result.live_case_results:
+        payload["live_evaluation"] = _build_live_diagnostics_payload(result.live_case_results)
+
+    return payload
 
 
 def render_markdown_report(
@@ -212,6 +218,55 @@ def render_markdown_report(
             lines.append(f"- {case_id}")
         lines.append("")
 
+    # Add live evaluation diagnostics if present
+    if result.live_case_results:
+        lines.extend([
+            "",
+            "Live Evaluation Diagnostics:",
+            "",
+        ])
+
+        failure_category_counts: dict[str, int] = {}
+        total_retrieval_attempts = 0
+        total_elapsed_time = 0.0
+        evaluated_count = 0
+        failed_count = 0
+        skipped_count = 0
+
+        for live_result in result.live_case_results:
+            total_retrieval_attempts += live_result.retrieval_attempts
+            total_elapsed_time += live_result.elapsed_seconds
+
+            if live_result.status == "evaluated":
+                evaluated_count += 1
+            elif live_result.status == "failed":
+                failed_count += 1
+            else:
+                skipped_count += 1
+
+            if live_result.failure_category:
+                category_name = live_result.failure_category.value
+                failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
+
+        lines.append(f"Total cases: {len(result.live_case_results)}")
+        lines.append(f"Evaluated: {evaluated_count}")
+        lines.append(f"Failed: {failed_count}")
+        lines.append(f"Skipped: {skipped_count}")
+        lines.append("")
+
+        if failure_category_counts:
+            lines.append("Failure categories:")
+            for category, count in sorted(failure_category_counts.items()):
+                lines.append(f"- {category}: {count}")
+            lines.append("")
+
+        avg_attempts = total_retrieval_attempts / len(result.live_case_results) if result.live_case_results else 0
+        lines.append("Retrieval diagnostics:")
+        lines.append(f"- Total retrieval attempts: {total_retrieval_attempts}")
+        lines.append(f"- Average attempts per case: {avg_attempts:.1f}")
+        lines.append(f"- Total elapsed time: {total_elapsed_time:.1f}s")
+        lines.append("")
+
     lines.append("Confusion matrix:")
     for expected, actuals in aggregate.confusion_matrix.items():
         for actual, count in actuals.items():
@@ -267,3 +322,59 @@ def _fmt(value: float | None) -> str:
 
 def _fmt_pct(value: float | None) -> str:
     return f"{value:.1%}" if value is not None else "n/a"
+
+
+def _build_live_diagnostics_payload(live_results: list) -> dict[str, Any]:
+    """Build the live evaluation diagnostics section of the report payload."""
+    from app.evaluation.evaluator import LiveCaseResult
+
+    failure_category_counts: dict[str, int] = {}
+    total_retrieval_attempts = 0
+    total_elapsed_time = 0.0
+    evaluated_count = 0
+    failed_count = 0
+    skipped_count = 0
+
+    for result in live_results:
+        total_retrieval_attempts += result.retrieval_attempts
+        total_elapsed_time += result.elapsed_seconds
+
+        if result.status == "evaluated":
+            evaluated_count += 1
+        elif result.status == "failed":
+            failed_count += 1
+        else:
+            skipped_count += 1
+
+        if result.failure_category:
+            category_name = result.failure_category.value
+            failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
+
+    avg_attempts = total_retrieval_attempts / len(live_results) if live_results else 0
+
+    return {
+        "total_cases": len(live_results),
+        "evaluated_count": evaluated_count,
+        "failed_count": failed_count,
+        "skipped_count": skipped_count,
+        "failure_category_counts": failure_category_counts,
+        "retrieval_diagnostics": {
+            "total_retrieval_attempts": total_retrieval_attempts,
+            "average_attempts_per_case": avg_attempts,
+            "total_elapsed_time": total_elapsed_time,
+        },
+        "case_results": [
+            {
+                "case_id": r.case_id,
+                "status": r.status,
+                "expected_verdict": r.expected_verdict.value,
+                "actual_verdict": r.actual_verdict.value if r.actual_verdict else None,
+                "confidence": r.confidence,
+                "failure_category": r.failure_category.value if r.failure_category else None,
+                "failure_reason": r.failure_reason,
+                "retrieval_attempts": r.retrieval_attempts,
+                "elapsed_seconds": r.elapsed_seconds,
+            }
+            for r in live_results
+        ],
+    }

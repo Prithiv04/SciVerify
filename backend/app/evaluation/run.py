@@ -118,8 +118,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run_live_evaluation(dataset_path: Path):
     from app.evaluation.dataset_loader import is_placeholder_doi, validate_live_eligibility
-    from app.evaluation.evaluator import EvaluationResult, evaluate_case
-    from app.services.verification_service import analyze_verification
+    from app.evaluation.evaluator import EvaluationResult, evaluate_case, LiveCaseResult
+    from app.evaluation.live_diagnostics import evaluate_live_case, MAX_RETRIES
 
     dataset = load_dataset(dataset_path)
     
@@ -147,17 +147,32 @@ def _run_live_evaluation(dataset_path: Path):
     skipped: list[str] = []
     skip_reasons: dict[str, int] = {}
     responses_by_id: dict = {}
+    live_case_results: list[LiveCaseResult] = []
+    failure_category_counts: dict[str, int] = {}
+    total_retrieval_attempts = 0
+    total_elapsed_time = 0.0
 
     for case in live_eligible_cases:
-        try:
-            response = analyze_verification(case.claim, case.doi)
+        live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
+        live_case_results.append(live_result)
+        total_retrieval_attempts += live_result.retrieval_attempts
+        total_elapsed_time += live_result.elapsed_seconds
+
+        if live_result.status == "evaluated" and response is not None:
+            # Successfully evaluated - use the response
             responses_by_id[case.id] = response
             cases.append(evaluate_case(case.id, case.expected_verdict, response))
-        except Exception as exc:
-            reason = str(exc).split(":")[0] if ":" in str(exc) else "unknown"
-            skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
-            print(f"Skipped live case {case.id}: {exc}", file=sys.stderr)
+        else:
+            # Failed or skipped
             skipped.append(case.id)
+            if live_result.failure_category:
+                category_name = live_result.failure_category.value
+                failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
+                skip_reasons[category_name] = skip_reasons.get(category_name, 0) + 1
+                print(f"Skipped live case {case.id}: {live_result.failure_category.value} - {live_result.failure_reason}", file=sys.stderr)
+            else:
+                skip_reasons["unknown"] = skip_reasons.get("unknown", 0) + 1
+                print(f"Skipped live case {case.id}: unknown reason", file=sys.stderr)
     
     # Also add non-live-eligible cases to skipped
     for case in dataset.cases:
@@ -178,6 +193,21 @@ def _run_live_evaluation(dataset_path: Path):
         print(f"Skip reasons:", file=sys.stderr)
         for reason, count in skip_reasons.items():
             print(f"  - {reason}: {count}", file=sys.stderr)
+    
+    if failure_category_counts:
+        print(f"", file=sys.stderr)
+        print(f"Skip reasons by category:", file=sys.stderr)
+        for category, count in failure_category_counts.items():
+            print(f"  - {category}: {count}", file=sys.stderr)
+    
+    if live_case_results:
+        avg_attempts = total_retrieval_attempts / len(live_case_results) if live_case_results else 0
+        print(f"", file=sys.stderr)
+        print(f"Retrieval diagnostics:", file=sys.stderr)
+        print(f"  - Total retrieval attempts: {total_retrieval_attempts}", file=sys.stderr)
+        print(f"  - Average attempts per case: {avg_attempts:.1f}", file=sys.stderr)
+        print(f"  - Total elapsed time: {total_elapsed_time:.1f}s", file=sys.stderr)
+    
     print("", file=sys.stderr)
     
     return EvaluationResult(
@@ -186,6 +216,7 @@ def _run_live_evaluation(dataset_path: Path):
         aggregate=aggregate,
         skipped_case_ids=skipped,
         responses_by_id=responses_by_id,
+        live_case_results=live_case_results,
     )
 
 

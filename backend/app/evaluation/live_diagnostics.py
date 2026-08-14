@@ -1,0 +1,237 @@
+from __future__ import annotations
+
+import logging
+import time
+from typing import Callable, TypeVar
+
+import httpx
+
+from app.evaluation.dataset_loader import BenchmarkCase
+from app.evaluation.evaluator import LiveCaseResult
+from app.schemas.paper import PaperRetrievalStatus
+from app.schemas.verification import (
+    LiveFailureCategory,
+    Verdict,
+    VerificationResponse,
+)
+from app.services.document_retriever import InterstitialPageError
+from app.services.llm.provider import (
+    LLMProviderError,
+    LLMResponseError,
+    LLMUnavailableError,
+)
+from app.services.paper_retriever import (
+    DocumentRetrievalError,
+    FullTextUnavailableError,
+    PaperNotFoundError,
+    PaperProviderError,
+)
+from app.services.verification_service import analyze_verification
+
+logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+RETRYABLE_CATEGORIES = {
+    LiveFailureCategory.NETWORK_TIMEOUT,
+    LiveFailureCategory.NETWORK_ERROR,
+    LiveFailureCategory.RATE_LIMITED,
+    LiveFailureCategory.HTTP_403,
+    LiveFailureCategory.HTTP_404,
+}
+
+T = TypeVar("T")
+
+
+def classify_exception(exc: Exception) -> LiveFailureCategory:
+    """Classify an exception into a LiveFailureCategory."""
+    if isinstance(exc, PaperNotFoundError):
+        return LiveFailureCategory.DOI_NOT_FOUND
+    if isinstance(exc, FullTextUnavailableError):
+        return LiveFailureCategory.FULL_TEXT_UNAVAILABLE
+    if isinstance(exc, InterstitialPageError):
+        return LiveFailureCategory.ANTI_BOT_BLOCKED
+    if isinstance(exc, DocumentRetrievalError):
+        # Check if it's an HTTP error
+        msg = str(exc).lower()
+        if "timed out" in msg or "timeout" in msg:
+            return LiveFailureCategory.NETWORK_TIMEOUT
+        if "403" in msg or "forbidden" in msg:
+            return LiveFailureCategory.HTTP_403
+        if "404" in msg or "not found" in msg:
+            return LiveFailureCategory.HTTP_404
+        return LiveFailureCategory.INVALID_DOCUMENT
+    if isinstance(exc, PaperProviderError):
+        msg = str(exc).lower()
+        if "timed out" in msg or "timeout" in msg:
+            return LiveFailureCategory.NETWORK_TIMEOUT
+        if "rate limit" in msg or "too many requests" in msg:
+            return LiveFailureCategory.RATE_LIMITED
+        if "unavailable" in msg:
+            return LiveFailureCategory.NETWORK_ERROR
+        return LiveFailureCategory.NETWORK_ERROR
+    if isinstance(exc, httpx.TimeoutException):
+        return LiveFailureCategory.NETWORK_TIMEOUT
+    if isinstance(exc, httpx.RequestError):
+        return LiveFailureCategory.NETWORK_ERROR
+    if isinstance(exc, (LLMProviderError, LLMResponseError)):
+        msg = str(exc).lower()
+        if "quota" in msg or "limit" in msg:
+            return LiveFailureCategory.LLM_QUOTA_EXCEEDED
+        if "timed out" in msg or "timeout" in msg:
+            return LiveFailureCategory.LLM_TIMEOUT
+        return LiveFailureCategory.LLM_FAILURE
+    if isinstance(exc, LLMUnavailableError):
+        return LiveFailureCategory.LLM_FAILURE
+    return LiveFailureCategory.UNKNOWN_FAILURE
+
+
+def classify_http_status(status_code: int) -> LiveFailureCategory:
+    """Classify an HTTP status code into a LiveFailureCategory."""
+    if status_code == 403:
+        return LiveFailureCategory.HTTP_403
+    if status_code == 404:
+        return LiveFailureCategory.HTTP_404
+    if status_code == 429:
+        return LiveFailureCategory.RATE_LIMITED
+    if 500 <= status_code < 600:
+        return LiveFailureCategory.NETWORK_ERROR
+    if 400 <= status_code < 500:
+        return LiveFailureCategory.INVALID_RESPONSE
+    return LiveFailureCategory.UNKNOWN_FAILURE
+
+
+def classify_paper_retrieval_status(status: PaperRetrievalStatus) -> LiveFailureCategory | None:
+    """Classify a PaperRetrievalStatus into a LiveFailureCategory if applicable."""
+    if status == PaperRetrievalStatus.NOT_FOUND:
+        return LiveFailureCategory.DOI_NOT_FOUND
+    if status == PaperRetrievalStatus.FULL_TEXT_UNAVAILABLE:
+        return LiveFailureCategory.FULL_TEXT_UNAVAILABLE
+    if status == PaperRetrievalStatus.PARSING_FAILURE:
+        return LiveFailureCategory.INVALID_DOCUMENT
+    if status == PaperRetrievalStatus.PROVIDER_ERROR:
+        return LiveFailureCategory.NETWORK_ERROR
+    return None
+
+
+def should_retry(category: LiveFailureCategory, attempt: int) -> bool:
+    """Determine if a failed operation should be retried."""
+    if attempt >= MAX_RETRIES:
+        return False
+    return category in RETRYABLE_CATEGORIES
+
+
+def execute_with_retry[T](
+    fn: Callable[[], T],
+    case_id: str,
+) -> tuple[T, LiveFailureCategory | None, str | None, int]:
+    """Execute a function with bounded retries and backoff."""
+    last_category: LiveFailureCategory | None = None
+    last_reason: str | None = None
+    attempts = 0
+
+    for attempt in range(MAX_RETRIES + 1):
+        attempts += 1
+        try:
+            result = fn()
+            return result, None, None, attempts
+        except Exception as exc:
+            last_category = classify_exception(exc)
+            last_reason = str(exc)
+
+            if not should_retry(last_category, attempt):
+                logger.warning(
+                    "Case %s failed with non-retryable error: category=%s reason=%s",
+                    case_id,
+                    last_category,
+                    last_reason,
+                )
+                raise
+
+            backoff = min(2 ** attempt, 10)  # Exponential backoff, max 10s
+            logger.info(
+                "Case %s attempt %d failed, retrying in %ds: category=%s reason=%s",
+                case_id,
+                attempt + 1,
+                backoff,
+                last_category,
+                last_reason,
+            )
+            time.sleep(backoff)
+
+    # This should not be reached, but handle it
+    raise RuntimeError(f"Max retries exceeded for case {case_id}")
+
+
+def evaluate_live_case(
+    case: BenchmarkCase,
+    max_retries: int = 3,
+) -> tuple[LiveCaseResult, VerificationResponse | None]:
+    """Evaluate a single live case with full diagnostics tracking.
+    
+    Returns:
+        A tuple of (LiveCaseResult, VerificationResponse | None).
+        The response is None if the case failed or was skipped.
+    """
+    from app.evaluation.evaluator import evaluate_case
+
+    start_time = time.time()
+    retrieval_attempts = 0
+    failure_category: LiveFailureCategory | None = None
+    failure_reason: str | None = None
+    status = "failed"
+    actual_verdict: Verdict | None = None
+    confidence: float | None = None
+    response: VerificationResponse | None = None
+
+    try:
+        def _run_verification():
+            return analyze_verification(case.claim, case.doi)
+
+        response, _, _, attempts = execute_with_retry(_run_verification, case.id)
+        retrieval_attempts = attempts
+
+        # Evaluate the response
+        case_metrics = evaluate_case(case.id, case.expected_verdict, response)
+        actual_verdict = case_metrics.actual_verdict
+        confidence = case_metrics.confidence
+        status = "evaluated"
+
+    except Exception as exc:
+        failure_category = classify_exception(exc)
+        failure_reason = str(exc)
+        retrieval_attempts = max_retries + 1  # We tried and failed
+        logger.error(
+            "Case %s failed after %d attempts: category=%s reason=%s",
+            case.id,
+            retrieval_attempts,
+            failure_category,
+            failure_reason,
+        )
+
+    elapsed_seconds = time.time() - start_time
+
+    live_result = LiveCaseResult(
+        case_id=case.id,
+        status=status,
+        expected_verdict=case.expected_verdict,
+        actual_verdict=actual_verdict,
+        confidence=confidence,
+        failure_category=failure_category,
+        failure_reason=failure_reason,
+        retrieval_attempts=retrieval_attempts,
+        elapsed_seconds=elapsed_seconds,
+    )
+
+    return live_result, response
+
+
+__all__ = [
+    "classify_exception",
+    "classify_http_status",
+    "classify_paper_retrieval_status",
+    "evaluate_live_case",
+    "execute_with_retry",
+    "MAX_RETRIES",
+    "RETRYABLE_CATEGORIES",
+    "should_retry",
+]

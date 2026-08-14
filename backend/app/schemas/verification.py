@@ -25,6 +25,23 @@ class VerificationStatus(str, Enum):
     PROVIDER_ERROR = "provider_error"
 
 
+class LiveFailureCategory(str, Enum):
+    DOI_NOT_FOUND = "doi_not_found"
+    FULL_TEXT_UNAVAILABLE = "full_text_unavailable"
+    ANTI_BOT_BLOCKED = "anti_bot_blocked"
+    HTTP_403 = "http_403"
+    HTTP_404 = "http_404"
+    RATE_LIMITED = "rate_limited"
+    INVALID_DOCUMENT = "invalid_document"
+    NETWORK_TIMEOUT = "network_timeout"
+    NETWORK_ERROR = "network_error"
+    LLM_FAILURE = "llm_failure"
+    LLM_QUOTA_EXCEEDED = "llm_quota_exceeded"
+    LLM_TIMEOUT = "llm_timeout"
+    INVALID_RESPONSE = "invalid_response"
+    UNKNOWN_FAILURE = "unknown_failure"
+
+
 class VerificationAnalyzeRequest(BaseModel):
     claim: str
     doi: str
