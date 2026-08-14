@@ -29,6 +29,7 @@ class LiveFailureCategory(str, Enum):
     DOI_NOT_FOUND = "doi_not_found"
     FULL_TEXT_UNAVAILABLE = "full_text_unavailable"
     ANTI_BOT_BLOCKED = "anti_bot_blocked"
+    PAYWALLED = "paywalled"
     HTTP_403 = "http_403"
     HTTP_404 = "http_404"
     RATE_LIMITED = "rate_limited"

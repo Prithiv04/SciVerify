@@ -107,6 +107,61 @@ python -m app.evaluation.run --live
 
 Use only when you explicitly want live pipeline results. Automated tests never use live mode.
 
+### Live evaluation health check
+
+Before running live evaluation, you can check which benchmark cases are likely to succeed:
+
+```bash
+cd backend
+python -m app.evaluation.run --live-health-check
+```
+
+This checks:
+- DOI resolution (Crossref → OpenAlex)
+- Full-text availability via OpenAlex
+- Known open access repository access (PMC, Europe PMC, arXiv, etc.)
+
+Health check results are written to `evaluation/results/health_check.json`.
+
+### Skip unhealthy cases
+
+To skip cases marked as unhealthy during live evaluation:
+
+```bash
+cd backend
+python -m app.evaluation.run --live --skip-unhealthy
+```
+
+This requires running the health check first to generate the health check data.
+
+### Live evaluation requirements
+
+Live evaluation requires:
+- LLM provider configured (via `LLM_PROVIDER`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`)
+- Network access to external APIs (Crossref, OpenAlex, publisher sites)
+- Some benchmark cases may fail due to:
+  - DOI not indexed in citation databases
+  - Full text behind paywall
+  - Publisher blocking automated access
+  - Network timeouts or rate limits
+
+### Failure classification
+
+Live evaluation failures are classified into categories:
+- **DOI_NOT_FOUND**: DOI not indexed in Crossref or OpenAlex
+- **FULL_TEXT_UNAVAILABLE**: Metadata exists but no accessible full text
+- **ANTI_BOT_BLOCKED**: Publisher blocks automated access (CAPTCHA, bot detection)
+- **PAYWALLED**: Content requires subscription or purchase
+- **HTTP_403**: Access forbidden
+- **HTTP_404**: Resource not found
+- **RATE_LIMITED**: API rate limit exceeded
+- **NETWORK_TIMEOUT**: Request timeout
+- **NETWORK_ERROR**: General network error
+- **LLM_FAILURE**: LLM provider error
+- **INVALID_DOCUMENT**: Document parsing or validation error
+
+Deterministic failures (DOI_NOT_FOUND, FULL_TEXT_UNAVAILABLE, ANTI_BOT_BLOCKED, PAYWALLED, HTTP_404, INVALID_DOCUMENT) are not retried. Transient failures (NETWORK_TIMEOUT, RATE_LIMITED, HTTP_403) are retried up to 3 times.
+
 ## Limitations
 
 - Benchmark quality depends on case labels and fixture fidelity.

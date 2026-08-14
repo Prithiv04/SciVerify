@@ -34,6 +34,16 @@ _INTERSTITIAL_PATTERNS = (
     re.compile(r"access denied", re.IGNORECASE),
 )
 
+_PAYWALL_PATTERNS = (
+    re.compile(r"subscription required", re.IGNORECASE),
+    re.compile(r"purchase access", re.IGNORECASE),
+    re.compile(r"paywall", re.IGNORECASE),
+    re.compile(r"sign in to access", re.IGNORECASE),
+    re.compile(r"institutional access", re.IGNORECASE),
+    re.compile(r"buy this article", re.IGNORECASE),
+    re.compile(r"full text requires", re.IGNORECASE),
+)
+
 
 class DocumentRetrievalError(Exception):
     """Raised when a document cannot be retrieved."""
@@ -49,6 +59,10 @@ class UnsupportedContentTypeError(DocumentRetrievalError):
 
 class DocumentTooLargeError(DocumentRetrievalError):
     """Raised when a document exceeds the configured size limit."""
+
+
+class PaywallError(DocumentRetrievalError):
+    """Raised when a document is behind a paywall or requires subscription."""
 
 
 @dataclass(frozen=True)
@@ -68,6 +82,16 @@ def is_interstitial_content(content: bytes, text: str | None = None) -> bool:
         return False
 
     return any(pattern.search(normalized) for pattern in _INTERSTITIAL_PATTERNS)
+
+
+def is_paywall_content(content: bytes, text: str | None = None) -> bool:
+    """Return True when downloaded content looks like a paywall or subscription page."""
+    sample = text if text is not None else content.decode("utf-8", errors="replace")
+    normalized = sample.strip()
+    if not normalized:
+        return False
+
+    return any(pattern.search(normalized) for pattern in _PAYWALL_PATTERNS)
 
 
 def retrieve_document(
@@ -126,6 +150,17 @@ def retrieve_document(
             )
             raise InterstitialPageError(
                 "Downloaded content is a browser challenge or anti-bot interstitial page."
+            )
+
+        if detected_format == "html" and is_paywall_content(raw_content, text):
+            logger.warning(
+                "Document retrieval rejected paywall content: candidate_url=%s final_url=%s content_type=%s",
+                url,
+                final_url,
+                content_type or "unknown",
+            )
+            raise PaywallError(
+                "Downloaded content is behind a paywall or requires subscription."
             )
 
         logger.info(

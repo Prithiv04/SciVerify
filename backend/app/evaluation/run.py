@@ -68,6 +68,22 @@ def build_parser() -> argparse.ArgumentParser:
             "WARNING: may call external APIs and consume LLM quota."
         ),
     )
+    parser.add_argument(
+        "--live-health-check",
+        action="store_true",
+        help=(
+            "Run health check on benchmark cases without LLM calls. "
+            "Checks DOI resolution and full-text availability."
+        ),
+    )
+    parser.add_argument(
+        "--skip-unhealthy",
+        action="store_true",
+        help=(
+            "Skip cases marked as unhealthy during live evaluation. "
+            "Requires health check data to be available."
+        ),
+    )
     return parser
 
 
@@ -75,12 +91,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.live_health_check:
+        return _run_health_check(args.dataset)
+
     if args.live:
         print(
             "WARNING: Live evaluation may retrieve papers and call configured LLM providers.",
             file=sys.stderr,
         )
-        result = _run_live_evaluation(args.dataset)
+        result = _run_live_evaluation(args.dataset, args.skip_unhealthy)
     else:
         result = load_and_evaluate_offline(args.dataset, args.fixtures_dir)
         result = type(result)(
@@ -121,12 +140,59 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _run_live_evaluation(dataset_path: Path):
+def _run_health_check(dataset_path: Path) -> int:
+    """Run health check on benchmark cases."""
+    from app.evaluation.benchmark_health import check_benchmark_health
+
+    print("Running benchmark health check...", file=sys.stderr)
+    print("", file=sys.stderr)
+
+    report = check_benchmark_health(dataset_path)
+
+    print("Health Check Summary", file=sys.stderr)
+    print("=" * 50, file=sys.stderr)
+    print(f"Total cases: {report.total_cases}", file=sys.stderr)
+    print(f"Healthy: {report.healthy_cases}", file=sys.stderr)
+    print(f"Unindexed: {report.unindexed_cases}", file=sys.stderr)
+    print(f"Paywalled: {report.paywalled_cases}", file=sys.stderr)
+    print(f"Blocked: {report.blocked_cases}", file=sys.stderr)
+    print(f"Unknown: {report.unknown_cases}", file=sys.stderr)
+    print("", file=sys.stderr)
+
+    # Write JSON report
+    output_dir = default_results_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / "health_check.json"
+    output_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    print(f"Wrote health check report to {output_path}", file=sys.stderr)
+
+    # Exit with error if no healthy cases
+    if report.healthy_cases == 0:
+        print("WARNING: No healthy cases found for live evaluation", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def _run_live_evaluation(dataset_path: Path, skip_unhealthy: bool = False):
     from app.evaluation.dataset_loader import is_placeholder_doi, validate_live_eligibility
     from app.evaluation.evaluator import EvaluationResult, evaluate_case
     from app.evaluation.live_diagnostics import evaluate_live_case, LiveCaseResult, LiveEvaluationMetrics, MAX_RETRIES
 
     dataset = load_dataset(dataset_path)
+
+    # Load health check data if skip_unhealthy is enabled
+    unhealthy_case_ids: set[str] = set()
+    if skip_unhealthy:
+        health_check_path = default_results_dir() / "health_check.json"
+        if health_check_path.exists():
+            health_data = json.loads(health_check_path.read_text(encoding="utf-8"))
+            for case_data in health_data.get("cases", []):
+                if case_data.get("health_status") not in ("HEALTHY",):
+                    unhealthy_case_ids.add(case_data["case_id"])
+            print(f"Skipping {len(unhealthy_case_ids)} unhealthy cases based on health check", file=sys.stderr)
+        else:
+            print("WARNING: Health check data not found, proceeding with all live-eligible cases", file=sys.stderr)
 
     # Validate live eligibility and report placeholder DOIs
     eligibility_warnings = validate_live_eligibility(dataset)
@@ -136,8 +202,11 @@ def _run_live_evaluation(dataset_path: Path):
             print(f"  {warning}", file=sys.stderr)
         print("", file=sys.stderr)
 
-    # Filter to live-eligible cases only
-    live_eligible_cases = [case for case in dataset.cases if case.live_evaluable]
+    # Filter to live-eligible cases only, excluding unhealthy if requested
+    live_eligible_cases = [
+        case for case in dataset.cases
+        if case.live_evaluable and (not skip_unhealthy or case.id not in unhealthy_case_ids)
+    ]
     total_cases = len(dataset.cases)
     live_eligible_count = len(live_eligible_cases)
 

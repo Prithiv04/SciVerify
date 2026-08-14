@@ -16,6 +16,7 @@ from app.schemas.verification import LiveFailureCategory
 from app.services.document_retriever import (
     DocumentRetrievalError,
     InterstitialPageError,
+    PaywallError,
 )
 from app.services.llm.provider import (
     LLMProviderError,
@@ -41,6 +42,10 @@ class TestClassifyException:
     def test_interstitial_page(self) -> None:
         exc = InterstitialPageError("Browser challenge detected")
         assert classify_exception(exc) == LiveFailureCategory.ANTI_BOT_BLOCKED
+
+    def test_paywall_error(self) -> None:
+        exc = PaywallError("Content is behind a paywall")
+        assert classify_exception(exc) == LiveFailureCategory.PAYWALLED
 
     def test_document_retrieval_403(self) -> None:
         exc = DocumentRetrievalError("Access denied (403)")
@@ -176,6 +181,7 @@ class TestDeterministicFailureCategories:
             LiveFailureCategory.DOI_NOT_FOUND,
             LiveFailureCategory.FULL_TEXT_UNAVAILABLE,
             LiveFailureCategory.ANTI_BOT_BLOCKED,
+            LiveFailureCategory.PAYWALLED,
             LiveFailureCategory.INVALID_DOCUMENT,
             LiveFailureCategory.HTTP_404,
             LiveFailureCategory.INVALID_RESPONSE,

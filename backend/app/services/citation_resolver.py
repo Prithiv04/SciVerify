@@ -15,6 +15,9 @@ CROSSREF_API_URL = os.getenv(
 OPENALEX_API_URL = os.getenv(
     "OPENALEX_API_URL", "https://api.openalex.org"
 ).rstrip("/")
+SEMANTIC_SCHOLAR_API_URL = os.getenv(
+    "SEMANTIC_SCHOLAR_API_URL", "https://api.semanticscholar.org"
+).rstrip("/")
 USER_AGENT = os.getenv(
     "CITATION_USER_AGENT",
     "SciVerify/0.1.0 (https://github.com/sciverify; citation-resolver)",
@@ -50,6 +53,7 @@ def resolve_doi(
         except CitationResolverError as exc:
             crossref_error = exc
 
+        openalex_error: Exception | None = None
         try:
             metadata = _resolve_from_openalex(normalized, http_client)
             if metadata is not None:
@@ -57,7 +61,16 @@ def resolve_doi(
         except CitationNotFoundError:
             raise
         except CitationResolverError as exc:
-            if crossref_error is not None:
+            openalex_error = exc
+
+        try:
+            metadata = _resolve_from_semantic_scholar(normalized, http_client)
+            if metadata is not None:
+                return metadata
+        except CitationNotFoundError:
+            raise
+        except CitationResolverError as exc:
+            if crossref_error is not None and openalex_error is not None:
                 raise CitationResolverError(
                     "Citation providers are temporarily unavailable."
                 ) from exc
@@ -134,6 +147,38 @@ def _resolve_from_openalex(
     return _map_openalex_work(payload, doi)
 
 
+def _resolve_from_semantic_scholar(
+    doi: str,
+    client: httpx.Client,
+) -> CitationMetadata | None:
+    url = f"{SEMANTIC_SCHOLAR_API_URL}/paper/DOI:{doi}"
+    try:
+        response = client.get(url)
+    except httpx.TimeoutException as exc:
+        raise CitationResolverError("Semantic Scholar request timed out.") from exc
+    except httpx.RequestError as exc:
+        raise CitationResolverError("Semantic Scholar request failed.") from exc
+
+    if response.status_code == 404:
+        return None
+
+    if response.status_code >= 500:
+        raise CitationResolverError("Semantic Scholar service is unavailable.")
+
+    if response.status_code >= 400:
+        raise CitationResolverError("Semantic Scholar rejected the request.")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise CitationResolverError("Semantic Scholar returned invalid JSON.") from exc
+
+    if not isinstance(payload, dict):
+        return None
+
+    return _map_semantic_scholar_paper(payload, doi)
+
+
 def _map_crossref_message(message: dict[str, Any], doi: str) -> CitationMetadata | None:
     resolved_doi = _first_str(message.get("DOI")) or doi
     title = _first_str(message.get("title"))
@@ -208,6 +253,75 @@ def _map_openalex_work(work: dict[str, Any], doi: str) -> CitationMetadata | Non
         source="openalex",
         type=work_type,
     )
+
+
+def _map_semantic_scholar_paper(paper: dict[str, Any], doi: str) -> CitationMetadata | None:
+    title = paper.get("title")
+    if isinstance(title, str):
+        title = title.strip() or None
+    else:
+        title = None
+
+    authors = _extract_semantic_scholar_authors(paper.get("authors"))
+    journal = paper.get("venue")
+    if isinstance(journal, str):
+        journal = journal.strip() or None
+    else:
+        journal = None
+
+    year = paper.get("year")
+    if not isinstance(year, int):
+        year = None
+
+    paper_doi = paper.get("externalIds", {}).get("DOI")
+    resolved_doi = doi
+    if isinstance(paper_doi, str) and paper_doi.strip():
+        resolved_doi = paper_doi.lower()
+
+    url = paper.get("url") if isinstance(paper.get("url"), str) else None
+    if not url:
+        url = f"https://doi.org/{resolved_doi}"
+
+    work_type = paper.get("publicationTypes")
+    if isinstance(work_type, list) and work_type:
+        work_type = work_type[0] if isinstance(work_type[0], str) else None
+    else:
+        work_type = None
+
+    if not any([title, authors, journal, year]):
+        return None
+
+    return CitationMetadata(
+        doi=resolved_doi.lower(),
+        title=title,
+        authors=authors,
+        journal=journal,
+        publisher=None,
+        year=year,
+        url=url,
+        source="semantic_scholar",
+        type=work_type,
+    )
+
+
+def _extract_semantic_scholar_authors(raw_authors: Any) -> list[str]:
+    if not isinstance(raw_authors, list):
+        return []
+
+    authors: list[str] = []
+    for author in raw_authors:
+        if not isinstance(author, dict):
+            continue
+        given = author.get("given")
+        family = author.get("family")
+        name_parts = [
+            part.strip()
+            for part in [given, family]
+            if isinstance(part, str) and part.strip()
+        ]
+        if name_parts:
+            authors.append(" ".join(name_parts))
+    return authors
 
 
 def _extract_crossref_authors(raw_authors: Any) -> list[str]:

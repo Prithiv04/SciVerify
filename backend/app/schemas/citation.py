@@ -11,7 +11,7 @@ class CitationMetadata(BaseModel):
     publisher: str | None = None
     year: int | None = None
     url: str | None = None
-    source: Literal["crossref", "openalex"]
+    source: Literal["crossref", "openalex", "semantic_scholar"]
     type: str | None = None
 
 

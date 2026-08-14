@@ -125,18 +125,21 @@ class TestCrossrefParsing:
 
 
 class TestOpenAlexFallback:
+    @patch("app.services.citation_resolver._resolve_from_semantic_scholar")
     @patch("app.services.citation_resolver._resolve_from_openalex")
     @patch("app.services.citation_resolver._resolve_from_crossref")
     def test_openalex_called_when_crossref_not_found(
         self,
         mock_crossref: MagicMock,
         mock_openalex: MagicMock,
+        mock_semantic_scholar: MagicMock,
     ) -> None:
         mock_crossref.return_value = None
         mock_openalex.return_value = _map_openalex_work(
             OPENALEX_WORK,
             "10.1038/s41586-020-2649-2",
         )
+        mock_semantic_scholar.return_value = None
 
         result = resolve_doi("10.1038/s41586-020-2649-2", client=MagicMock())
 
@@ -146,30 +149,36 @@ class TestOpenAlexFallback:
 
 
 class TestNotFound:
+    @patch("app.services.citation_resolver._resolve_from_semantic_scholar")
     @patch("app.services.citation_resolver._resolve_from_openalex")
     @patch("app.services.citation_resolver._resolve_from_crossref")
     def test_both_providers_not_found(
         self,
         mock_crossref: MagicMock,
         mock_openalex: MagicMock,
+        mock_semantic_scholar: MagicMock,
     ) -> None:
         mock_crossref.return_value = None
         mock_openalex.return_value = None
+        mock_semantic_scholar.return_value = None
 
         with pytest.raises(CitationNotFoundError):
             resolve_doi("10.1038/not-found-example", client=MagicMock())
 
 
 class TestResolverErrors:
+    @patch("app.services.citation_resolver._resolve_from_semantic_scholar")
     @patch("app.services.citation_resolver._resolve_from_openalex")
     @patch("app.services.citation_resolver._resolve_from_crossref")
     def test_both_providers_fail(
         self,
         mock_crossref: MagicMock,
         mock_openalex: MagicMock,
+        mock_semantic_scholar: MagicMock,
     ) -> None:
         mock_crossref.side_effect = CitationResolverError("Crossref request timed out.")
         mock_openalex.side_effect = CitationResolverError("OpenAlex request timed out.")
+        mock_semantic_scholar.side_effect = CitationResolverError("Semantic Scholar request timed out.")
 
         with pytest.raises(CitationResolverError):
             resolve_doi("10.1038/s41586-020-2649-2", client=MagicMock())

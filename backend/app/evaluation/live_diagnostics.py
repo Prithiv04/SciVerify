@@ -15,7 +15,7 @@ from app.schemas.verification import (
     Verdict,
     VerificationResponse,
 )
-from app.services.document_retriever import InterstitialPageError
+from app.services.document_retriever import InterstitialPageError, PaywallError
 from app.services.llm.provider import (
     LLMProviderError,
     LLMResponseError,
@@ -44,6 +44,7 @@ DETERMINISTIC_FAILURE_CATEGORIES = {
     LiveFailureCategory.DOI_NOT_FOUND,
     LiveFailureCategory.FULL_TEXT_UNAVAILABLE,
     LiveFailureCategory.ANTI_BOT_BLOCKED,
+    LiveFailureCategory.PAYWALLED,
     LiveFailureCategory.INVALID_DOCUMENT,
     LiveFailureCategory.HTTP_404,
     LiveFailureCategory.INVALID_RESPONSE,
@@ -103,6 +104,8 @@ def classify_exception(exc: Exception) -> LiveFailureCategory:
         return LiveFailureCategory.FULL_TEXT_UNAVAILABLE
     if isinstance(exc, InterstitialPageError):
         return LiveFailureCategory.ANTI_BOT_BLOCKED
+    if isinstance(exc, PaywallError):
+        return LiveFailureCategory.PAYWALLED
     if isinstance(exc, DocumentRetrievalError):
         # Check if it's an HTTP error
         msg = str(exc).lower()
