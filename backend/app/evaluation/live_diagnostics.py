@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Callable, TypeVar
+from collections import Counter
+from dataclasses import dataclass, field
+from typing import Callable, Literal, TypeVar
 
 import httpx
 
 from app.evaluation.dataset_loader import BenchmarkCase
-from app.evaluation.evaluator import LiveCaseResult
 from app.schemas.paper import PaperRetrievalStatus
 from app.schemas.verification import (
     LiveFailureCategory,
@@ -36,10 +37,62 @@ RETRYABLE_CATEGORIES = {
     LiveFailureCategory.NETWORK_ERROR,
     LiveFailureCategory.RATE_LIMITED,
     LiveFailureCategory.HTTP_403,
+}
+
+# Deterministic failures that should not be retried
+DETERMINISTIC_FAILURE_CATEGORIES = {
+    LiveFailureCategory.DOI_NOT_FOUND,
+    LiveFailureCategory.FULL_TEXT_UNAVAILABLE,
+    LiveFailureCategory.ANTI_BOT_BLOCKED,
+    LiveFailureCategory.INVALID_DOCUMENT,
     LiveFailureCategory.HTTP_404,
+    LiveFailureCategory.INVALID_RESPONSE,
 }
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class LiveCaseResult:
+    case_id: str
+    status: Literal["evaluated", "skipped", "failed"]
+    expected_verdict: Verdict
+    actual_verdict: Verdict | None
+    confidence: float | None
+    failure_category: LiveFailureCategory | None
+    failure_reason: str | None
+    retrieval_attempts: int
+    elapsed_seconds: float
+
+
+@dataclass
+class LiveEvaluationMetrics:
+    """Metrics for live evaluation, separating retrieval failures from verification failures."""
+    live_eligible_count: int = 0
+    successfully_evaluated_count: int = 0
+    retrieval_failure_count: int = 0
+    verification_failure_count: int = 0
+    failure_category_counts: Counter = field(default_factory=Counter)
+    total_retrieval_attempts: int = 0
+    total_elapsed_seconds: float = 0.0
+
+    @property
+    def retrieval_success_rate(self) -> float:
+        if self.live_eligible_count == 0:
+            return 0.0
+        return self.successfully_evaluated_count / self.live_eligible_count
+
+    @property
+    def retrieval_failure_rate(self) -> float:
+        if self.live_eligible_count == 0:
+            return 0.0
+        return self.retrieval_failure_count / self.live_eligible_count
+
+    @property
+    def average_attempts_per_case(self) -> float:
+        if self.live_eligible_count == 0:
+            return 0.0
+        return self.total_retrieval_attempts / self.live_eligible_count
 
 
 def classify_exception(exc: Exception) -> LiveFailureCategory:
@@ -138,6 +191,18 @@ def execute_with_retry[T](
             last_category = classify_exception(exc)
             last_reason = str(exc)
 
+            # Deterministic failures should fail immediately with 1 attempt
+            if last_category in DETERMINISTIC_FAILURE_CATEGORIES:
+                logger.warning(
+                    "Case %s failed with deterministic error (no retry): category=%s reason=%s",
+                    case_id,
+                    last_category,
+                    last_reason,
+                )
+                # Reset attempts to 1 for deterministic failures
+                attempts = 1
+                raise
+
             if not should_retry(last_category, attempt):
                 logger.warning(
                     "Case %s failed with non-retryable error: category=%s reason=%s",
@@ -167,7 +232,7 @@ def evaluate_live_case(
     max_retries: int = 3,
 ) -> tuple[LiveCaseResult, VerificationResponse | None]:
     """Evaluate a single live case with full diagnostics tracking.
-    
+
     Returns:
         A tuple of (LiveCaseResult, VerificationResponse | None).
         The response is None if the case failed or was skipped.
@@ -187,7 +252,7 @@ def evaluate_live_case(
         def _run_verification():
             return analyze_verification(case.claim, case.doi)
 
-        response, _, _, attempts = execute_with_retry(_run_verification, case.id)
+        response, category, reason, attempts = execute_with_retry(_run_verification, case.id)
         retrieval_attempts = attempts
 
         # Evaluate the response
@@ -199,7 +264,9 @@ def evaluate_live_case(
     except Exception as exc:
         failure_category = classify_exception(exc)
         failure_reason = str(exc)
-        retrieval_attempts = max_retries + 1  # We tried and failed
+        # For deterministic failures, attempts is already set to 1 by execute_with_retry
+        # For other failures, we need to track the actual attempts
+        retrieval_attempts = max_retries + 1 if failure_category not in DETERMINISTIC_FAILURE_CATEGORIES else 1
         logger.error(
             "Case %s failed after %d attempts: category=%s reason=%s",
             case.id,
@@ -229,8 +296,11 @@ __all__ = [
     "classify_exception",
     "classify_http_status",
     "classify_paper_retrieval_status",
+    "DETERMINISTIC_FAILURE_CATEGORIES",
     "evaluate_live_case",
     "execute_with_retry",
+    "LiveCaseResult",
+    "LiveEvaluationMetrics",
     "MAX_RETRIES",
     "RETRYABLE_CATEGORIES",
     "should_retry",

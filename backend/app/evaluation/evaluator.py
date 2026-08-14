@@ -2,25 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
 from app.evaluation.dataset_loader import BenchmarkCase, BenchmarkDataset, load_dataset
 from app.evaluation.io_paths import load_case_fixture
+from app.evaluation.live_diagnostics import (
+    DETERMINISTIC_FAILURE_CATEGORIES,
+    LiveCaseResult,
+    LiveEvaluationMetrics,
+)
 from app.evaluation.metrics import AggregateMetrics, CaseMetrics, aggregate_case_metrics, evaluate_case
-from app.schemas.verification import LiveFailureCategory, Verdict, VerificationResponse
-
-
-@dataclass(frozen=True)
-class LiveCaseResult:
-    case_id: str
-    status: Literal["evaluated", "skipped", "failed"]
-    expected_verdict: Verdict
-    actual_verdict: Verdict | None
-    confidence: float | None
-    failure_category: LiveFailureCategory | None
-    failure_reason: str | None
-    retrieval_attempts: int
-    elapsed_seconds: float
+from app.schemas.verification import Verdict, VerificationResponse
 
 
 @dataclass(frozen=True)
@@ -31,6 +22,7 @@ class EvaluationResult:
     skipped_case_ids: list[str]
     responses_by_id: dict[str, VerificationResponse] = None  # type: ignore[assignment]
     live_case_results: list[LiveCaseResult] = field(default_factory=list)
+    live_metrics: LiveEvaluationMetrics = field(default_factory=LiveEvaluationMetrics)
 
     def __post_init__(self) -> None:
         if self.responses_by_id is None:

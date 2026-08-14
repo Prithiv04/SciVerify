@@ -6,6 +6,7 @@ from app.evaluation.live_diagnostics import (
     classify_exception,
     classify_http_status,
     classify_paper_retrieval_status,
+    DETERMINISTIC_FAILURE_CATEGORIES,
     MAX_RETRIES,
     RETRYABLE_CATEGORIES,
     should_retry,
@@ -140,15 +141,17 @@ class TestShouldRetry:
         assert should_retry(LiveFailureCategory.NETWORK_TIMEOUT, MAX_RETRIES) is False
         assert should_retry(LiveFailureCategory.NETWORK_ERROR, MAX_RETRIES + 1) is False
 
-    def test_non_retryable_category(self) -> None:
-        assert should_retry(LiveFailureCategory.DOI_NOT_FOUND, 0) is False
-        assert should_retry(LiveFailureCategory.FULL_TEXT_UNAVAILABLE, 0) is False
-        assert should_retry(LiveFailureCategory.ANTI_BOT_BLOCKED, 0) is False
-        assert should_retry(LiveFailureCategory.LLM_FAILURE, 0) is False
-
-    def test_all_retryable_categories(self) -> None:
-        for category in RETRYABLE_CATEGORIES:
+    def test_retryable_categories(self) -> None:
+        retryable = [
+            LiveFailureCategory.NETWORK_TIMEOUT,
+            LiveFailureCategory.NETWORK_ERROR,
+            LiveFailureCategory.RATE_LIMITED,
+            LiveFailureCategory.HTTP_403,
+        ]
+        for category in retryable:
             assert should_retry(category, 0) is True
+            assert should_retry(category, MAX_RETRIES - 1) is True
+            assert should_retry(category, MAX_RETRIES) is False
 
     def test_non_retryable_categories(self) -> None:
         non_retryable = [
@@ -164,6 +167,25 @@ class TestShouldRetry:
         ]
         for category in non_retryable:
             assert should_retry(category, 0) is False
+
+
+class TestDeterministicFailureCategories:
+    def test_deterministic_failures_not_retried(self) -> None:
+        """Test that deterministic failures are in the DETERMINISTIC_FAILURE_CATEGORIES set."""
+        expected_deterministic = {
+            LiveFailureCategory.DOI_NOT_FOUND,
+            LiveFailureCategory.FULL_TEXT_UNAVAILABLE,
+            LiveFailureCategory.ANTI_BOT_BLOCKED,
+            LiveFailureCategory.INVALID_DOCUMENT,
+            LiveFailureCategory.HTTP_404,
+            LiveFailureCategory.INVALID_RESPONSE,
+        }
+        assert DETERMINISTIC_FAILURE_CATEGORIES == expected_deterministic
+
+    def test_deterministic_failures_are_not_retryable(self) -> None:
+        """Test that deterministic failures are not in RETRYABLE_CATEGORIES."""
+        for category in DETERMINISTIC_FAILURE_CATEGORIES:
+            assert category not in RETRYABLE_CATEGORIES
 
 
 class TestConstants:

@@ -5,10 +5,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.evaluation.dataset_loader import BenchmarkCase
-from app.evaluation.evaluator import EvaluationResult, LiveCaseResult
+from app.evaluation.evaluator import EvaluationResult
 from app.evaluation.live_diagnostics import (
     classify_exception,
+    DETERMINISTIC_FAILURE_CATEGORIES,
     evaluate_live_case,
+    LiveCaseResult,
+    LiveEvaluationMetrics,
     MAX_RETRIES,
 )
 from app.schemas.verification import LiveFailureCategory, Verdict
@@ -72,7 +75,7 @@ class TestEvaluateLiveCase:
         assert live_result.case_id == "test-002"
         assert live_result.failure_category == LiveFailureCategory.DOI_NOT_FOUND
         assert live_result.failure_reason == "Paper not found"
-        assert live_result.retrieval_attempts == MAX_RETRIES + 1
+        assert live_result.retrieval_attempts == 1  # Deterministic failures have 1 attempt
         assert response is None
 
     def test_llm_failure_classification(self) -> None:
@@ -94,6 +97,7 @@ class TestEvaluateLiveCase:
         assert live_result.status == "failed"
         assert live_result.failure_category == LiveFailureCategory.LLM_FAILURE
         assert live_result.failure_reason == "LLM provider error"
+        assert live_result.retrieval_attempts == MAX_RETRIES + 1  # Verification failures retry
         assert response is None
 
     def test_infrastructure_vs_verification_failure_separation(self) -> None:
@@ -114,6 +118,7 @@ class TestEvaluateLiveCase:
         # This should be classified as an infrastructure failure (DOI_NOT_FOUND)
         assert live_result1.failure_category == LiveFailureCategory.DOI_NOT_FOUND
         assert live_result1.failure_category != LiveFailureCategory.LLM_FAILURE
+        assert live_result1.retrieval_attempts == 1  # Deterministic failure
 
     def test_retry_logic_with_retryable_error(self) -> None:
         """Test that retryable errors trigger retries."""
@@ -173,10 +178,72 @@ class TestEvaluateLiveCase:
         with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=PaperNotFoundError("Paper not found")):
             live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
 
-        # DOI_NOT_FOUND is non-retryable, should fail immediately
+        # DOI_NOT_FOUND is deterministic (non-retryable), should fail immediately with 1 attempt
         assert live_result.status == "failed"
-        assert live_result.retrieval_attempts == MAX_RETRIES + 1
+        assert live_result.retrieval_attempts == 1  # Deterministic failures have 1 attempt
         assert response is None
+
+    def test_deterministic_failure_not_retried(self) -> None:
+        """Test that deterministic failures fail immediately with 1 attempt."""
+        case = BenchmarkCase(
+            id="test-007",
+            claim="Test claim",
+            doi="10.1000/nonexistent.2024.002",
+            expected_verdict=Verdict.SUPPORTS,
+            description="Test case",
+            live_evaluable=True,
+        )
+
+        with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=PaperNotFoundError("Paper not found")):
+            live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
+
+        assert live_result.status == "failed"
+        assert live_result.failure_category == LiveFailureCategory.DOI_NOT_FOUND
+        assert live_result.retrieval_attempts == 1  # Should be exactly 1 for deterministic failures
+        assert response is None
+
+    def test_transient_failure_is_retried(self) -> None:
+        """Test that transient failures trigger retries."""
+        from app.services.paper_retriever import PaperProviderError
+
+        case = BenchmarkCase(
+            id="test-008",
+            claim="Test claim",
+            doi="10.1000/test.2024.004",
+            expected_verdict=Verdict.SUPPORTS,
+            description="Test case",
+            live_evaluable=True,
+        )
+
+        mock_response = MagicMock()
+        mock_response.status = "success"
+        mock_response.verdict = Verdict.SUPPORTS
+        mock_response.confidence = 0.95
+        mock_response.evidence = []
+        mock_response.paper = MagicMock()
+        mock_response.paper.paper_id = "test-doi"
+        mock_response.claim_traceability = MagicMock()
+        mock_response.claim_traceability.segments = []
+        mock_response.claim_traceability.overall_coverage = 0.0
+        mock_response.validation_warnings = None
+        mock_response.agent_agreement = True
+
+        call_count = 0
+
+        def side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise PaperProviderError("Rate limit exceeded")
+            return mock_response
+
+        with patch("app.evaluation.live_diagnostics.analyze_verification", side_effect=side_effect):
+            live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
+
+        # Should have retried and succeeded
+        assert live_result.status == "evaluated"
+        assert live_result.retrieval_attempts == 2
+        assert response is not None
 
 
 class TestLiveCaseResult:
@@ -247,7 +314,7 @@ class TestEvaluationResultWithLiveResults:
                 confidence=None,
                 failure_category=LiveFailureCategory.DOI_NOT_FOUND,
                 failure_reason="Paper not found",
-                retrieval_attempts=4,
+                retrieval_attempts=1,  # Deterministic failure
                 elapsed_seconds=2.5,
             ),
         ]
@@ -276,3 +343,55 @@ class TestEvaluationResultWithLiveResults:
         )
 
         assert result.live_case_results == []
+
+
+class TestLiveEvaluationMetrics:
+    def test_live_metrics_initialization(self) -> None:
+        """Test that LiveEvaluationMetrics initializes correctly."""
+        metrics = LiveEvaluationMetrics()
+        assert metrics.live_eligible_count == 0
+        assert metrics.successfully_evaluated_count == 0
+        assert metrics.retrieval_failure_count == 0
+        assert metrics.verification_failure_count == 0
+        assert metrics.total_retrieval_attempts == 0
+        assert metrics.total_elapsed_seconds == 0.0
+
+    def test_retrieval_success_rate(self) -> None:
+        """Test retrieval success rate calculation."""
+        metrics = LiveEvaluationMetrics()
+        metrics.live_eligible_count = 30
+        metrics.successfully_evaluated_count = 19
+        assert metrics.retrieval_success_rate == 19 / 30
+
+    def test_retrieval_failure_rate(self) -> None:
+        """Test retrieval failure rate calculation."""
+        metrics = LiveEvaluationMetrics()
+        metrics.live_eligible_count = 30
+        metrics.retrieval_failure_count = 11
+        assert metrics.retrieval_failure_rate == 11 / 30
+
+    def test_average_attempts_per_case(self) -> None:
+        """Test average attempts per case calculation."""
+        metrics = LiveEvaluationMetrics()
+        metrics.live_eligible_count = 30
+        metrics.total_retrieval_attempts = 63
+        assert metrics.average_attempts_per_case == 63 / 30
+
+    def test_zero_division_protection(self) -> None:
+        """Test that division by zero is handled gracefully."""
+        metrics = LiveEvaluationMetrics()
+        assert metrics.retrieval_success_rate == 0.0
+        assert metrics.retrieval_failure_rate == 0.0
+        assert metrics.average_attempts_per_case == 0.0
+
+    def test_deterministic_failures_counted_as_retrieval_failures(self) -> None:
+        """Test that deterministic failures are counted as retrieval failures."""
+        from collections import Counter
+
+        metrics = LiveEvaluationMetrics()
+        metrics.live_eligible_count = 30
+        metrics.retrieval_failure_count = 11
+        metrics.failure_category_counts = Counter({"doi_not_found": 11})
+
+        assert metrics.retrieval_failure_count == 11
+        assert metrics.failure_category_counts["doi_not_found"] == 11

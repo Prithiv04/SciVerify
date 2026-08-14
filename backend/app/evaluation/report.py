@@ -90,7 +90,7 @@ def build_report_payload(
 
     # Add live evaluation diagnostics if present
     if result.live_case_results:
-        payload["live_evaluation"] = _build_live_diagnostics_payload(result.live_case_results)
+        payload["live_evaluation"] = _build_live_diagnostics_payload(result.live_case_results, result.live_metrics)
 
     return payload
 
@@ -226,46 +226,73 @@ def render_markdown_report(
             "",
         ])
 
-        failure_category_counts: dict[str, int] = {}
-        total_retrieval_attempts = 0
-        total_elapsed_time = 0.0
-        evaluated_count = 0
-        failed_count = 0
-        skipped_count = 0
-
-        for live_result in result.live_case_results:
-            total_retrieval_attempts += live_result.retrieval_attempts
-            total_elapsed_time += live_result.elapsed_seconds
-
-            if live_result.status == "evaluated":
-                evaluated_count += 1
-            elif live_result.status == "failed":
-                failed_count += 1
-            else:
-                skipped_count += 1
-
-            if live_result.failure_category:
-                category_name = live_result.failure_category.value
-                failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
-
-        lines.append(f"Total cases: {len(result.live_case_results)}")
-        lines.append(f"Evaluated: {evaluated_count}")
-        lines.append(f"Failed: {failed_count}")
-        lines.append(f"Skipped: {skipped_count}")
-        lines.append("")
-
-        if failure_category_counts:
-            lines.append("Failure categories:")
-            for category, count in sorted(failure_category_counts.items()):
-                lines.append(f"- {category}: {count}")
+        # Use live_metrics if available
+        if result.live_metrics and result.live_metrics.live_eligible_count > 0:
+            live_metrics = result.live_metrics
+            lines.append(f"Live eligible: {live_metrics.live_eligible_count}")
+            lines.append(f"Successfully evaluated: {live_metrics.successfully_evaluated_count}")
+            lines.append(f"Retrieval/infrastructure failures: {live_metrics.retrieval_failure_count}")
+            lines.append(f"Verification failures: {live_metrics.verification_failure_count}")
             lines.append("")
 
-        avg_attempts = total_retrieval_attempts / len(result.live_case_results) if result.live_case_results else 0
-        lines.append("Retrieval diagnostics:")
-        lines.append(f"- Total retrieval attempts: {total_retrieval_attempts}")
-        lines.append(f"- Average attempts per case: {avg_attempts:.1f}")
-        lines.append(f"- Total elapsed time: {total_elapsed_time:.1f}s")
-        lines.append("")
+            if live_metrics.failure_category_counts:
+                lines.append("Failure categories:")
+                for category, count in sorted(live_metrics.failure_category_counts.items()):
+                    lines.append(f"- {category}: {count}")
+                lines.append("")
+
+            lines.append("Retrieval diagnostics:")
+            lines.append(f"- Total retrieval attempts: {live_metrics.total_retrieval_attempts}")
+            lines.append(f"- Average attempts per case: {live_metrics.average_attempts_per_case:.1f}")
+            lines.append(f"- Total elapsed time: {live_metrics.total_elapsed_seconds:.1f}s")
+            lines.append("")
+
+            lines.append("Live verification metrics:")
+            lines.append(f"- Retrieval success rate: {_fmt_pct(live_metrics.retrieval_success_rate)}")
+            lines.append(f"- Retrieval failure rate: {_fmt_pct(live_metrics.retrieval_failure_rate)}")
+            lines.append("")
+        else:
+            # Fallback to computed values
+            failure_category_counts: dict[str, int] = {}
+            total_retrieval_attempts = 0
+            total_elapsed_time = 0.0
+            evaluated_count = 0
+            failed_count = 0
+            skipped_count = 0
+
+            for live_result in result.live_case_results:
+                total_retrieval_attempts += live_result.retrieval_attempts
+                total_elapsed_time += live_result.elapsed_seconds
+
+                if live_result.status == "evaluated":
+                    evaluated_count += 1
+                elif live_result.status == "failed":
+                    failed_count += 1
+                else:
+                    skipped_count += 1
+
+                if live_result.failure_category:
+                    category_name = live_result.failure_category.value
+                    failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
+
+            lines.append(f"Total cases: {len(result.live_case_results)}")
+            lines.append(f"Evaluated: {evaluated_count}")
+            lines.append(f"Failed: {failed_count}")
+            lines.append(f"Skipped: {skipped_count}")
+            lines.append("")
+
+            if failure_category_counts:
+                lines.append("Failure categories:")
+                for category, count in sorted(failure_category_counts.items()):
+                    lines.append(f"- {category}: {count}")
+                lines.append("")
+
+            avg_attempts = total_retrieval_attempts / len(result.live_case_results) if result.live_case_results else 0
+            lines.append("Retrieval diagnostics:")
+            lines.append(f"- Total retrieval attempts: {total_retrieval_attempts}")
+            lines.append(f"- Average attempts per case: {avg_attempts:.1f}")
+            lines.append(f"- Total elapsed time: {total_elapsed_time:.1f}s")
+            lines.append("")
 
     lines.append("Confusion matrix:")
     for expected, actuals in aggregate.confusion_matrix.items():
@@ -324,7 +351,7 @@ def _fmt_pct(value: float | None) -> str:
     return f"{value:.1%}" if value is not None else "n/a"
 
 
-def _build_live_diagnostics_payload(live_results: list) -> dict[str, Any]:
+def _build_live_diagnostics_payload(live_results: list, live_metrics) -> dict[str, Any]:
     """Build the live evaluation diagnostics section of the report payload."""
     from app.evaluation.evaluator import LiveCaseResult
 
@@ -352,12 +379,38 @@ def _build_live_diagnostics_payload(live_results: list) -> dict[str, Any]:
 
     avg_attempts = total_retrieval_attempts / len(live_results) if live_results else 0
 
+    # Use live_metrics if available, otherwise fall back to computed values
+    if live_metrics and live_metrics.live_eligible_count > 0:
+        live_eligible_count = live_metrics.live_eligible_count
+        successfully_evaluated_count = live_metrics.successfully_evaluated_count
+        retrieval_failure_count = live_metrics.retrieval_failure_count
+        verification_failure_count = live_metrics.verification_failure_count
+        retrieval_success_rate = live_metrics.retrieval_success_rate
+        retrieval_failure_rate = live_metrics.retrieval_failure_rate
+        total_retrieval_attempts = live_metrics.total_retrieval_attempts
+        total_elapsed_time = live_metrics.total_elapsed_seconds
+        avg_attempts = live_metrics.average_attempts_per_case
+        failure_category_counts = dict(live_metrics.failure_category_counts)
+    else:
+        live_eligible_count = len(live_results)
+        successfully_evaluated_count = evaluated_count
+        retrieval_failure_count = 0
+        verification_failure_count = 0
+        retrieval_success_rate = 0.0
+        retrieval_failure_rate = 0.0
+
     return {
+        "live_eligible_count": live_eligible_count,
+        "successfully_evaluated_count": successfully_evaluated_count,
+        "retrieval_failure_count": retrieval_failure_count,
+        "verification_failure_count": verification_failure_count,
         "total_cases": len(live_results),
         "evaluated_count": evaluated_count,
         "failed_count": failed_count,
         "skipped_count": skipped_count,
         "failure_category_counts": failure_category_counts,
+        "retrieval_success_rate": retrieval_success_rate,
+        "retrieval_failure_rate": retrieval_failure_rate,
         "retrieval_diagnostics": {
             "total_retrieval_attempts": total_retrieval_attempts,
             "average_attempts_per_case": avg_attempts,
