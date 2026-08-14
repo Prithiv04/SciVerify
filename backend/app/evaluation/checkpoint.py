@@ -3,7 +3,7 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timezone
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 def save_checkpoint(state: Dict[str, Any], checkpoint_path: Path) -> None:
@@ -15,8 +15,13 @@ def save_checkpoint(state: Dict[str, Any], checkpoint_path: Path) -> None:
     - timestamp: str
     """
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-    with checkpoint_path.open("w", encoding="utf-8") as f:
+    # Write to a temporary file and atomically replace the checkpoint
+    tmp_path = checkpoint_path.with_suffix('.tmp')
+    with tmp_path.open('w', encoding='utf-8') as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
+        f.flush()
+    # Replace the old checkpoint atomically
+    tmp_path.replace(checkpoint_path)
 
 
 def load_checkpoint(checkpoint_path: Path) -> Dict[str, Any]:

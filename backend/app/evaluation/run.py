@@ -18,6 +18,7 @@ except ImportError:
 from app.evaluation.dataset_loader import default_dataset_path, default_fixtures_dir, load_dataset
 from app.evaluation.evaluator import evaluate_offline_dataset, load_and_evaluate_offline
 from app.evaluation.io_paths import default_baseline_path, default_results_dir, write_json
+from app.evaluation.live_diagnostics import RETRIEVAL_FAILURE_CATEGORIES
 from app.evaluation.live_diagnostics import (
     DETERMINISTIC_FAILURE_CATEGORIES,
     LiveCaseResult,
@@ -247,13 +248,13 @@ def _run_live_evaluation(
         case for case in dataset.cases
         if case.live_evaluable and (not skip_unhealthy or case.id not in unhealthy_case_ids)
     ]
-    
+
     # Initialize checkpoint handling
     from app.evaluation.checkpoint import load_checkpoint, save_checkpoint
     checkpoint_path = (checkpoint_dir / "live_checkpoint.json") if checkpoint_dir else None
     if checkpoint_path:
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Load or initialize checkpoint state
     if resume and checkpoint_path and checkpoint_path.exists():
         checkpoint_state = load_checkpoint(checkpoint_path)
@@ -269,7 +270,7 @@ def _run_live_evaluation(
         if checkpoint_path:
             save_checkpoint(checkpoint_state, checkpoint_path)
         completed_ids = set()
-    
+
     cases = []
     skipped: list[str] = []
     responses_by_id: dict = {}
@@ -280,12 +281,13 @@ def _run_live_evaluation(
     failure_category_counts: dict[str, int] = {}
 
     for case in live_eligible_cases:
-        if case.id in completed_ids:
+        # Skip cases already processed in a previous run (either completed or failed)
+        if case.id in completed_ids or case.id in checkpoint_state.get("failed_cases", {}):
             continue
-            
+
         if quota_pause_seconds > 0:
             time.sleep(quota_pause_seconds)
-            
+
         live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
         live_case_results.append(live_result)
         live_metrics.total_retrieval_attempts += live_result.retrieval_attempts
@@ -374,15 +376,7 @@ def _run_live_evaluation(
 
     print("", file=sys.stderr)
 
-    return EvaluationResult(
-        dataset_path=dataset_path,
-        cases=cases,
-        aggregate=aggregate,
-        skipped_case_ids=skipped,
-        responses_by_id=responses_by_id,
-        live_case_results=live_case_results,
-        live_metrics=live_metrics,
-    )
+    return 0
 
 
 if __name__ == "__main__":
