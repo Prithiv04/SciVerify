@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ValidationError
 
 from app.schemas.verification import Verdict
 from app.utils.doi import InvalidDOIError, normalize_doi
@@ -21,6 +21,12 @@ PLACEHOLDER_DOI_PATTERNS = [
 ]
 
 
+def is_placeholder_doi(doi: str) -> bool:
+    """Check if a DOI matches known placeholder patterns."""
+    normalized_doi = doi.lower().strip()
+    return any(pattern in normalized_doi for pattern in PLACEHOLDER_DOI_PATTERNS)
+
+
 class BenchmarkCase(BaseModel):
     id: str
     claim: str
@@ -29,7 +35,7 @@ class BenchmarkCase(BaseModel):
     description: str
     expected_traceability_statuses: list[str] | None = None
     expected_min_evidence_count: int | None = None
-    live_evaluable: bool | None = None
+    live_evaluable: bool | None = Field(default=None)
 
     @field_validator("id", "claim", "description")
     @classmethod
@@ -46,21 +52,12 @@ class BenchmarkCase(BaseModel):
         except InvalidDOIError as exc:
             raise ValueError(str(exc)) from exc
 
-    @field_validator("live_evaluable")
-    @classmethod
-    def set_default_live_evaluable(cls, value: bool | None, info: Any) -> bool:
+    @model_validator(mode="after")
+    def set_default_live_evaluable(self) -> "BenchmarkCase":
         """Automatically determine live evaluable status based on DOI if not explicitly set."""
-        if value is not None:
-            return value
-        
-        doi = info.data.get("doi", "")
-        return not is_placeholder_doi(doi)
-
-
-def is_placeholder_doi(doi: str) -> bool:
-    """Check if a DOI matches known placeholder patterns."""
-    normalized_doi = doi.lower().strip()
-    return any(pattern in normalized_doi for pattern in PLACEHOLDER_DOI_PATTERNS)
+        if self.live_evaluable is None:
+            self.live_evaluable = not is_placeholder_doi(self.doi)
+        return self
 
 
 class BenchmarkDataset(BaseModel):
