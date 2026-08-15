@@ -1,585 +1,269 @@
-# SciVerify — Phase 17: Real Live Benchmark Execution & Provider Validation
+# Implement Phase 17.1 — Fix Live Quota-Abort Reporting Path
 
-## Objective
+Implement the approved Phase 17.1 plan in the SciVerify repository.
 
-Execute SciVerify's **real live LLM evaluation** against the healthy benchmark cases and obtain the first trustworthy live-performance measurements.
+## First: Inspect Before Editing
 
-Phase 15.1 and 15.2 already implemented quota-aware evaluation, checkpoint persistence, quota detection, and resume support. Phase 16 stabilized the tests and edge cases.
+Review the current implementation of:
 
-**Do not redesign or rewrite those systems.**
+* `backend/app/evaluation/run.py`
+* `backend/app/evaluation/report.py`
+* `backend/app/evaluation/live_diagnostics.py`
+* `backend/app/evaluation/checkpoint.py`
+* `backend/app/services/llm/provider.py`
+* existing tests under `backend/app/tests/`
 
-The primary goal of Phase 17 is to **run the existing system successfully and capture real live benchmark results**.
-
----
-
-## Current State
-
-The project currently has:
-
-* 30 benchmark cases.
-* 15 healthy/live-eligible cases.
-* 11 unindexed cases.
-* 4 paywalled cases.
-* Offline evaluation: **30/30 cases, 100% verdict accuracy**.
-* Existing live evaluation CLI.
-* Health-check support.
-* `--skip-unhealthy`.
-* Checkpoint persistence.
-* `--resume`.
-* Quota detection.
-* Graceful quota-abort behavior.
-* 330+ passing automated tests.
-* No production verification logic should be changed for this phase.
-
-The previous live evaluation was blocked by the Groq free-tier daily token limit.
-
----
-
-# Phase 17 Scope
-
-## 1. Repository Preflight
-
-Before making any code changes:
-
-Run:
-
-```powershell
-git status
-git log -1 --oneline
-```
-
-Verify the working tree is clean.
-
-Then inspect the current evaluation implementation:
+Pay particular attention to the current return-value flow between:
 
 ```text
-backend/app/evaluation/run.py
-backend/app/evaluation/live_diagnostics.py
-backend/app/evaluation/checkpoint.py
-backend/app/evaluation/metrics.py
-backend/app/evaluation/results/
-backend/evaluation/
+main()
+→ _run_live_evaluation()
+→ write_reports()
+→ build_report_payload()
 ```
 
-Do not modify files merely because they exist.
+Do not assume the architecture described in the plan is still identical to the current code. Adapt the implementation to the actual repository state.
 
----
+## Primary Bug to Fix
 
-# 2. Run the Existing Test Suite
-
-Run:
-
-```powershell
-cd backend
-python -m pytest -q
-```
-
-Expected:
+The latest live run correctly detected Groq daily quota exhaustion:
 
 ```text
-330+ passed
+Skipped live case ... llm_failure - LLM quota exhausted (daily token limit reached).
 ```
 
-If tests fail:
-
-1. Diagnose the failure.
-2. Fix only regressions directly related to the live evaluation workflow.
-3. Do not change production verification behavior.
-4. Re-run the complete test suite.
-
-Do not proceed to the real LLM benchmark while the test suite is failing.
-
----
-
-# 3. Run Live Health Check
-
-Run:
-
-```powershell
-python -m app.evaluation.run --live-health-check
-```
-
-Verify the health report.
-
-Expected benchmark distribution is approximately:
+However, after processing the quota failures, the application crashed with:
 
 ```text
-Total cases: 30
-Healthy: 15
-Unindexed: 11
-Paywalled: 4
-Blocked: 0
-Unknown: 0
+AttributeError: 'int' object has no attribute 'aggregate'
 ```
 
-The exact values should come from the current health-check output rather than being hardcoded.
+The traceback indicates that an integer exit code from `_run_live_evaluation()` is being passed into report generation, where an evaluation result object is expected.
 
-Confirm that the health report is written successfully.
+Fix this cleanly.
 
----
+## Implementation Requirements
 
-# 4. Provider Validation
+### 1. Separate evaluation result from process exit code
 
-Before starting the full benchmark, verify that the configured LLM provider is actually usable.
+Ensure `_run_live_evaluation()` and `main()` have a consistent contract.
 
-The previous Groq provider exhausted its daily TPD quota.
+The evaluation result object and CLI exit status must not be confused.
 
-Do NOT repeatedly call an exhausted provider.
-
-The provider must have enough available quota to process the live benchmark.
-
-Requirements:
-
-* Use the existing provider abstraction.
-* Do not hardcode API keys.
-* Do not modify `.env` files programmatically.
-* Do not commit secrets.
-* Do not bypass the provider abstraction.
-* Do not change verification agents simply to accommodate a provider.
-
-If the configured provider is unavailable because of quota:
+A preferred design is:
 
 ```text
-STOP the live benchmark.
+_run_live_evaluation()
+    ↓
+returns evaluation result
+    ↓
+main()
+    ↓
+generates report
+    ↓
+returns exit code
 ```
 
-Report clearly that the benchmark cannot proceed until a provider with sufficient quota is configured.
+If the existing architecture requires another design, use the smallest safe refactor that achieves the same separation.
 
-Do not wait for extremely long provider retry intervals.
+Do not break the offline evaluation path.
 
----
+### 2. Correct quota-abort behavior
 
-# 5. Clean Benchmark Checkpoint
+When:
 
-Before starting a completely new benchmark run, ensure that an old checkpoint is not accidentally reused.
+```python
+LiveFailureCategory.LLM_QUOTA_EXCEEDED
+```
 
-Use a dedicated directory, for example:
+is detected:
+
+* stop processing additional live cases;
+* do not wait for the provider retry timer;
+* preserve the checkpoint;
+* preserve failed-case information;
+* construct a valid partial evaluation result;
+* generate a partial report when possible;
+* print a clear quota-abort summary;
+* return a non-zero CLI exit code.
+
+Do not make additional unnecessary LLM requests.
+
+### 3. Preserve checkpoint/resume functionality
+
+Keep the existing:
 
 ```text
-backend/evaluation/checkpoints/phase17/
+--checkpoint-dir
+--resume
+--resume-live
 ```
 
-The checkpoint directory must remain ignored by Git.
+behavior intact.
+
+The checkpoint must remain valid after quota exhaustion.
+
+Do not reset previously recorded cases.
+
+Verify that `--resume-live` still maps correctly to `--resume`.
+
+### 4. Fix report generation
+
+Ensure:
+
+```python
+write_reports(result, ...)
+```
+
+always receives the actual live evaluation result object.
+
+Never pass:
+
+```python
+1
+```
+
+or another integer exit code into:
+
+```python
+build_report_payload()
+```
+
+A quota-aborted run must not crash while generating its report.
+
+If no cases were successfully evaluated, do not fabricate accuracy metrics. Represent unavailable metrics appropriately.
+
+The partial report should still contain useful information such as:
+
+* total eligible cases
+* successfully evaluated cases
+* skipped cases
+* verification failures
+* quota failures
+* retrieval diagnostics
+* failure categories
+* checkpoint/resume information where supported
+
+### 5. Add regression tests
+
+Add/update tests in:
+
+```text
+backend/app/tests/
+```
+
+Cover:
+
+#### Quota abort
+
+Simulate:
+
+```text
+LLM_QUOTA_EXCEEDED
+```
+
+and verify:
+
+* no crash;
+* checkpoint persisted;
+* partial result created;
+* report generation succeeds;
+* non-zero exit code returned.
+
+#### Successful live evaluation
 
 Verify:
 
-```powershell
-Get-ChildItem .\evaluation\checkpoints\phase17
-```
+* evaluation result reaches report generation;
+* report generation succeeds;
+* exit code is `0`.
 
-If this is a fresh Phase 17 run, remove only stale Phase 17 checkpoint state.
-
-Do NOT delete unrelated evaluation results or source files.
-
----
-
-# 6. Execute the Live Benchmark
-
-Run:
-
-```powershell
-python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir .\evaluation\checkpoints\phase17
-```
-
-The evaluator should process only the healthy benchmark cases.
-
-Expected:
-
-```text
-Total benchmark cases: 30
-Healthy/live eligible: 15
-Skipped unhealthy: 15
-```
-
-The exact values must come from the health-check result.
-
----
-
-# 7. Checkpoint Behavior
-
-During execution, verify that the checkpoint is updated after successful cases.
-
-Expected checkpoint behavior:
-
-```text
-Case 1 completed
-    ↓
-checkpoint updated
-
-Case 2 completed
-    ↓
-checkpoint updated
-
-Case 3 completed
-    ↓
-checkpoint updated
-```
-
-If the provider encounters a quota failure:
-
-```text
-LLM quota detected
-        ↓
-record failure
-        ↓
-persist checkpoint
-        ↓
-stop safely
-```
-
-The process must NOT sit for hundreds of seconds retrying a known daily TPD exhaustion.
-
----
-
-# 8. Resume Validation
-
-If the benchmark is interrupted or stops because of provider quota, verify that the checkpoint contains completed cases.
-
-Inspect:
-
-```powershell
-Get-Content .\evaluation\checkpoints\phase17\*.json
-```
-
-Then resume with:
-
-```powershell
-python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir .\evaluation\checkpoints\phase17 --resume
-```
+#### Resume
 
 Verify:
 
-* Previously completed cases are skipped.
-* Completed cases are not sent to the LLM again.
-* Remaining eligible cases continue processing.
-* Checkpoint state is updated after each newly completed case.
-* No duplicate benchmark results are created.
-
----
-
-# 9. Capture Live Results
-
-Once the benchmark completes, locate the generated evaluation results.
-
-Inspect:
-
 ```text
-backend/evaluation/results/
+--resume-live
 ```
 
-and the Phase 17 checkpoint directory.
+loads the checkpoint and skips already completed cases.
 
-Identify:
+#### Offline regression
 
-* Number of completed live cases.
-* Number of skipped cases.
-* Number of failed cases.
-* Number of quota failures.
-* Verdict distribution.
-* Verdict accuracy.
-* Evidence metrics.
-* Traceability metrics.
-* Agent agreement.
-* Confidence metrics.
-* Failure categories.
-* Per-case results.
+Ensure the existing offline evaluation remains unchanged.
 
-Do not invent missing metrics.
+Use mocks for LLM calls. Do NOT consume real Groq quota during tests.
 
-If a metric cannot be calculated from the live results, explicitly report it as unavailable.
-
----
-
-# 10. Live vs Offline Comparison
-
-Compare the live evaluation against the existing offline benchmark.
-
-Offline baseline currently reports:
-
-```text
-Cases: 30
-Verdict Accuracy: 100.0%
-
-Average evidence count: 0.9
-Average relevance: 0.61
-Average claim overlap: 0.55
-Evidence coverage: 56.7%
-
-Traceability completeness: 96.7%
-Traceability coverage: 48.9%
-Traceability link rate: 41.7%
-
-Agent agreement: 85.7%
-
-Unsupported-claim detection: 100.0%
-```
-
-These are the current offline values and must be treated as the baseline.
-
-The live results should be compared against them without changing the offline baseline.
-
----
-
-# 11. Generate a Phase 17 Benchmark Report
-
-Create a concise report containing:
-
-## Executive Summary
-
-* Number of benchmark cases.
-* Number of live-eligible cases.
-* Number successfully evaluated.
-* Number skipped.
-* Number failed.
-* Provider used.
-* Whether quota interruption occurred.
-
-## Live Metrics
-
-Include:
-
-* Verdict accuracy.
-* Per-verdict accuracy where available.
-* Evidence coverage.
-* Average evidence count.
-* Evidence relevance.
-* Claim overlap.
-* Traceability completeness.
-* Traceability coverage.
-* Traceability link rate.
-* Agent agreement.
-* Confidence metrics.
-* Failure categories.
-
-## Offline vs Live
-
-Create a comparison table:
-
-| Metric                 | Offline | Live | Difference |
-| ---------------------- | ------: | ---: | ---------: |
-| Verdict Accuracy       |     ... |  ... |        ... |
-| Evidence Coverage      |     ... |  ... |        ... |
-| Traceability Coverage  |     ... |  ... |        ... |
-| Traceability Link Rate |     ... |  ... |        ... |
-| Agent Agreement        |     ... |  ... |        ... |
-| Unsupported Detection  |     ... |  ... |        ... |
-
-Only include metrics that are genuinely available.
-
-## Failure Analysis
-
-Identify the most common live failure categories.
-
-Examples:
-
-```text
-Weak Evidence
-Poor Traceability
-Agent Disagreement
-Overconfident
-Retrieval Failure
-LLM Failure
-LLM Quota Exceeded
-```
-
-Do not artificially assign failures.
-
----
-
-# 12. Preserve Raw Results
-
-Do not overwrite the offline benchmark results.
-
-Keep Phase 17 live results separate, preferably under:
-
-```text
-backend/evaluation/results/live/phase17/
-```
-
-or another clearly named directory consistent with the existing project structure.
-
-The final live benchmark should be reproducible from the stored results and checkpoint data.
-
----
-
-# 13. Tests
-
-Do not add large amounts of new functionality.
+## Testing
 
 Run:
 
 ```powershell
+cd C:\Users\shaki\OneDrive\Desktop\SciVerify\backend
 python -m pytest -q
 ```
 
-Expected:
+The complete suite must pass.
 
-```text
-330+ passed
-```
-
-If any Phase 17-specific tests are added, they should test only:
-
-* Live result persistence.
-* Benchmark aggregation.
-* Resume behavior.
-* Provider failure handling.
-* Result/report consistency.
-
-Do NOT make real LLM calls inside automated tests.
-
-Use mocks/fakes for provider behavior.
-
----
-
-# 14. Git Safety Check
-
-Before committing:
+Then run:
 
 ```powershell
-cd C:\Users\shaki\OneDrive\Desktop\SciVerify
-
-git status
-git diff --stat
 git diff --check
+git status
 ```
 
-Ensure that:
+Fix any trailing whitespace or formatting problems.
 
-* `.env` is not staged.
-* API keys are not staged.
-* Checkpoint JSON files are ignored.
-* Temporary live results are ignored unless intentionally committed.
-* No unrelated files are modified.
+## Important Safety Constraints
 
-Do not commit generated checkpoint state or secrets.
+Do NOT modify:
 
----
+* verification agent logic
+* evidence ranking
+* retrieval algorithms
+* verdict determination
+* offline benchmark fixtures
+* `.env`
+* API keys
+* Groq configuration
+* unrelated production logic
 
-# 15. Success Criteria
-
-Phase 17 is considered successful when:
-
-### Repository
-
-* Working tree is clean before the benchmark.
-* Existing tests pass.
-
-### Health
-
-* Health check completes successfully.
-* Healthy cases are correctly identified.
-
-### Provider
-
-* A provider with sufficient quota is configured.
-* No unnecessary long retries occur.
-
-### Live Evaluation
-
-* Healthy benchmark cases are processed.
-* Real LLM responses are obtained.
-* Per-case results are persisted.
-* Checkpoint state is persisted.
-
-### Resume
-
-If interrupted:
-
-* Completed cases are skipped.
-* Remaining cases resume correctly.
-* No duplicate processing occurs.
-
-### Benchmark
-
-A final live benchmark result is available with:
+Keep the changes narrowly scoped to:
 
 ```text
-Live cases
-Verdict accuracy
-Evidence metrics
-Traceability metrics
-Agent agreement
-Confidence
-Failure analysis
+live evaluation
+quota-abort flow
+result/exit-code handling
+partial reporting
+checkpoint/resume behavior
+tests
 ```
 
-### Comparison
+## Do NOT Run a Real Live Benchmark
 
-Offline vs live performance is clearly reported.
+Do not execute:
 
----
-
-# Important Constraints
-
-DO NOT:
-
-* Modify verification agents.
-* Modify evidence-ranking logic.
-* Modify retrieval algorithms.
-* Modify benchmark fixtures.
-* Change offline benchmark results.
-* Hardcode provider credentials.
-* Commit `.env`.
-* Commit API keys.
-* Consume unnecessary LLM quota.
-* Retry indefinitely after daily quota exhaustion.
-* Rewrite working Phase 15.1/15.2 checkpoint logic without evidence of a bug.
-* Add unrelated features.
-
-Phase 17 is primarily an **execution and measurement phase**, not a major architecture rewrite.
-
----
-
-# Final Output
-
-At the end, report:
-
-```text
-PHASE 17 RESULT
-================
-
-Tests:
-XXX passed
-
-Health:
-XX / 30 healthy
-
-Live eligible:
-XX
-
-Successfully evaluated:
-XX
-
-Skipped:
-XX
-
-Failed:
-XX
-
-Quota failures:
-XX
-
-Live verdict accuracy:
-XX.X%
-
-Evidence coverage:
-XX.X%
-
-Traceability coverage:
-XX.X%
-
-Agent agreement:
-XX.X%
-
-Benchmark status:
-COMPLETED / PARTIAL / BLOCKED
-
-Offline vs Live:
-[brief comparison]
-
-Next recommended phase:
-Phase 18 — Live vs Offline Analysis & Benchmark Improvement
+```powershell
+python -m app.evaluation.run --live ...
 ```
 
-If the live benchmark is blocked by provider quota, do NOT keep retrying. Mark Phase 17 as **BLOCKED BY PROVIDER QUOTA**, preserve the checkpoint, and report exactly what remains to be completed.
+during implementation.
+
+The current Groq daily token quota is exhausted, and the purpose of this phase is to fix the control flow using mocked tests.
+
+Only run the full pytest suite and other non-quota-consuming validation.
+
+## Final Output
+
+After implementation, report:
+
+1. Files changed.
+2. Root cause of the `int has no attribute aggregate` error.
+3. How the result/exit-code flow was fixed.
+4. How quota-abort behavior now works.
+5. Tests added/updated.
+6. Final pytest result.
+7. `git diff --check` result.
+8. Whether the working tree is clean or what remains to commit.
+
+Do not modify unrelated files or automatically start another implementation phase.

@@ -144,6 +144,9 @@ def main(argv: list[str] | None = None) -> int:
             resume=args.resume,
             quota_pause_seconds=args.quota_pause_seconds,
         )
+        # If live evaluation returned an exit code, propagate it
+        if isinstance(result, int):
+            return result
     else:
         result = load_and_evaluate_offline(args.dataset, args.fixtures_dir)
         result = type(result)(
