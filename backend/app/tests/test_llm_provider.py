@@ -368,7 +368,7 @@ class TestLLMProvider:
 
     def test_groq_compatible_provider_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("LLM_PROVIDER", "groq-compatible")
-        monkeypatch.setenv("LLM_API_KEY", "test-key")
+        monkeypatch.setenv("LLM_API_KEY", "test-key-long-enough-1234")
         monkeypatch.setenv("LLM_BASE_URL", "https://api.groq.com/openai/v1")
         monkeypatch.setenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
@@ -377,6 +377,62 @@ class TestLLMProvider:
         assert isinstance(provider, OpenAICompatibleLLMProvider)
         assert provider.base_url == "https://api.groq.com/openai/v1"
         assert provider.model == "llama-3.3-70b-versatile"
+
+    def test_daily_token_quota_exhausted_includes_provider_message(self) -> None:
+        client = MagicMock(spec=httpx.Client)
+        quota_resp = MagicMock(spec=httpx.Response)
+        quota_resp.status_code = 429
+        quota_resp.text = (
+            '{"error":{"message":"Rate limit reached for model `llama-3.3-70b-versatile` on tokens per day (TPD): Limit 100000, Used 99206, Requested 2332. Please try again in 22m8.832s."}}'
+        )
+        quota_resp.json.return_value = {
+            "error": {
+                "message": "Rate limit reached for model `llama-3.3-70b-versatile` on tokens per day (TPD): Limit 100000, Used 99206, Requested 2332. Please try again in 22m8.832s."
+            }
+        }
+        quota_resp.headers = {}
+        client.post.return_value = quota_resp
+
+        provider = OpenAICompatibleLLMProvider(
+            api_key="test-key",
+            model="llama-3.3-70b-versatile",
+            base_url="https://api.groq.com/openai/v1",
+            client=client,
+            max_rate_limit_retries=2,
+        )
+
+        with pytest.raises(LLMProviderError) as exc_info:
+            provider.generate("prompt", response_model=ProsecutorAnalysis)
+
+        msg = str(exc_info.value)
+        assert "LLM quota exhausted (daily token limit reached)" in msg
+        assert "Limit 100000" in msg
+        assert "Used 99206" in msg
+        assert "Please try again in 22m8.832s" in msg
+        # Should fail immediately without retrying
+        assert client.post.call_count == 1
+
+    def test_daily_token_quota_exhausted_plain_text_fallback(self) -> None:
+        client = MagicMock(spec=httpx.Client)
+        quota_resp = MagicMock(spec=httpx.Response)
+        quota_resp.status_code = 429
+        quota_resp.text = "Error: tokens per day exceeded"
+        quota_resp.json.side_effect = ValueError("not json")
+        quota_resp.headers = {}
+        client.post.return_value = quota_resp
+
+        provider = OpenAICompatibleLLMProvider(
+            api_key="test-key",
+            model="llama-3.3-70b-versatile",
+            base_url="https://api.groq.com/openai/v1",
+            client=client,
+            max_rate_limit_retries=2,
+        )
+
+        with pytest.raises(LLMProviderError, match="LLM quota exhausted"):
+            provider.generate("prompt", response_model=ProsecutorAnalysis)
+
+        assert client.post.call_count == 1
 
 
 class TestStructuredPayloadNormalization:

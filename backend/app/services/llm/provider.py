@@ -326,6 +326,16 @@ class OpenAICompatibleLLMProvider(LLMProvider):
             # Detect permanent daily quota exhaustion
             lower_text = response.text.lower()
             if "tokens per day" in lower_text or "tpd" in lower_text:
+                error_msg = None
+                try:
+                    err_json = response.json()
+                    error_msg = err_json.get("error", {}).get("message")
+                except Exception:
+                    pass
+                if error_msg:
+                    raise LLMProviderError(
+                        f"LLM quota exhausted (daily token limit reached): {error_msg}"
+                    )
                 raise LLMProviderError(
                     "LLM quota exhausted (daily token limit reached)."
                 )
@@ -357,12 +367,19 @@ def get_llm_provider() -> LLMProvider:
         os.getenv("LLM_MAX_RETRIES", str(_DEFAULT_RATE_LIMIT_RETRIES))
     )
 
+    masked_key = (
+        f"{api_key[:4]}...{api_key[-4:]}"
+        if len(api_key) >= 12
+        else ("present" if api_key else "missing")
+    )
+
     logger.info(
-        "LLM provider config: provider=%s model=%s base_url=%s api_key_configured=%s api_key_length=%s max_rate_limit_retries=%s",
+        "LLM provider config: provider=%s model=%s base_url=%s api_key_configured=%s api_key_masked=%s api_key_length=%s max_rate_limit_retries=%s",
         provider,
         model,
         base_url,
         bool(api_key),
+        masked_key,
         len(api_key),
         max_rate_limit_retries,
     )
