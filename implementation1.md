@@ -1,184 +1,294 @@
-# Implement Phase 17.1 — Fix Live Quota-Abort Reporting Path
+# Phase 17.2 — Resumable Research-Paper Live Benchmark
 
-Implement the approved Phase 17.1 plan in the SciVerify repository.
+## Objective
 
-## First: Inspect Before Editing
+Fix the SciVerify live **research-paper benchmark** resume workflow.
 
-Review the current implementation of:
+The live benchmark evaluates the 30 research-paper verification cases in the benchmark dataset. The health check currently identifies 15 healthy/live-eligible cases.
 
-* `backend/app/evaluation/run.py`
-* `backend/app/evaluation/report.py`
-* `backend/app/evaluation/live_diagnostics.py`
-* `backend/app/evaluation/checkpoint.py`
-* `backend/app/services/llm/provider.py`
-* existing tests under `backend/app/tests/`
+When the Groq daily LLM quota is exhausted, the live evaluation correctly stops and saves those affected benchmark cases in the checkpoint.
 
-Pay particular attention to the current return-value flow between:
+The current problem is that `--resume-live` treats those quota-failed cases as already processed, so after the quota resets it does not retry them.
 
-```text
-main()
-→ _run_live_evaluation()
-→ write_reports()
-→ build_report_payload()
-```
+The goal is:
 
-Do not assume the architecture described in the plan is still identical to the current code. Adapt the implementation to the actual repository state.
+**Quota failure → save checkpoint → stop → quota resets → `--resume-live` → retry the affected research-paper cases.**
 
-## Primary Bug to Fix
+---
 
-The latest live run correctly detected Groq daily quota exhaustion:
+## Current Situation
+
+The Phase 17 checkpoint currently contains:
 
 ```text
-Skipped live case ... llm_failure - LLM quota exhausted (daily token limit reached).
+completed_case_ids: []
 ```
 
-However, after processing the quota failures, the application crashed with:
+and 15 entries in:
 
 ```text
-AttributeError: 'int' object has no attribute 'aggregate'
+failed_cases
 ```
 
-The traceback indicates that an integer exit code from `_run_live_evaluation()` is being passed into report generation, where an evaluation result object is expected.
-
-Fix this cleanly.
-
-## Implementation Requirements
-
-### 1. Separate evaluation result from process exit code
-
-Ensure `_run_live_evaluation()` and `main()` have a consistent contract.
-
-The evaluation result object and CLI exit status must not be confused.
-
-A preferred design is:
+Each failure represents:
 
 ```text
-_run_live_evaluation()
-    ↓
-returns evaluation result
-    ↓
-main()
-    ↓
-generates report
-    ↓
-returns exit code
+LLM quota exhausted (daily token limit reached).
 ```
 
-If the existing architecture requires another design, use the smallest safe refactor that achieves the same separation.
+Running:
 
-Do not break the offline evaluation path.
-
-### 2. Correct quota-abort behavior
-
-When:
-
-```python
-LiveFailureCategory.LLM_QUOTA_EXCEEDED
+```powershell
+python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir ./evaluation/checkpoints/phase17 --resume-live
 ```
 
-is detected:
-
-* stop processing additional live cases;
-* do not wait for the provider retry timer;
-* preserve the checkpoint;
-* preserve failed-case information;
-* construct a valid partial evaluation result;
-* generate a partial report when possible;
-* print a clear quota-abort summary;
-* return a non-zero CLI exit code.
-
-Do not make additional unnecessary LLM requests.
-
-### 3. Preserve checkpoint/resume functionality
-
-Keep the existing:
+currently results in:
 
 ```text
---checkpoint-dir
---resume
---resume-live
+Resuming from checkpoint with 0 completed cases.
+Successfully evaluated: 0
 ```
 
-behavior intact.
+This means quota-failed research-paper cases are not being retried.
 
-The checkpoint must remain valid after quota exhaustion.
+---
 
-Do not reset previously recorded cases.
+# Implementation Requirements
 
-Verify that `--resume-live` still maps correctly to `--resume`.
+## 1. Keep successful benchmark cases completed
 
-### 4. Fix report generation
-
-Ensure:
-
-```python
-write_reports(result, ...)
-```
-
-always receives the actual live evaluation result object.
-
-Never pass:
-
-```python
-1
-```
-
-or another integer exit code into:
-
-```python
-build_report_payload()
-```
-
-A quota-aborted run must not crash while generating its report.
-
-If no cases were successfully evaluated, do not fabricate accuracy metrics. Represent unavailable metrics appropriately.
-
-The partial report should still contain useful information such as:
-
-* total eligible cases
-* successfully evaluated cases
-* skipped cases
-* verification failures
-* quota failures
-* retrieval diagnostics
-* failure categories
-* checkpoint/resume information where supported
-
-### 5. Add regression tests
-
-Add/update tests in:
+Cases stored in:
 
 ```text
-backend/app/tests/
+completed_case_ids
 ```
 
-Cover:
+must NOT be executed again during resume.
 
-#### Quota abort
+Example:
 
-Simulate:
+```text
+case_001 → successfully evaluated
+        → completed_case_ids
+        → skip on future --resume-live
+```
+
+This prevents unnecessary LLM quota consumption.
+
+---
+
+## 2. Retry quota-failed research-paper cases
+
+During `--resume` / `--resume-live`, inspect `failed_cases`.
+
+If a failure represents:
 
 ```text
 LLM_QUOTA_EXCEEDED
 ```
 
-and verify:
+or the persisted failure contains:
 
-* no crash;
-* checkpoint persisted;
-* partial result created;
-* report generation succeeds;
-* non-zero exit code returned.
+```text
+LLM quota exhausted
+```
 
-#### Successful live evaluation
+then that benchmark case must be considered **retryable**.
 
-Verify:
+Example:
 
-* evaluation result reaches report generation;
-* report generation succeeds;
-* exit code is `0`.
+```json
+{
+  "case_001": {
+    "category": "llm_failure",
+    "reason": "LLM quota exhausted (daily token limit reached)."
+  }
+}
+```
 
-#### Resume
+`case_001` must be retried after the provider quota becomes available.
+
+---
+
+## 3. Do not retry every failure
+
+Only quota-exhaustion failures should receive this special resume behavior.
+
+Do NOT automatically retry all entries in `failed_cases`.
+
+Preserve existing handling for:
+
+* retrieval failures
+* infrastructure failures
+* generic LLM failures
+* verification failures
+* deterministic failures
+
+---
+
+## 4. Successful retry
+
+If a previously quota-failed research-paper case succeeds:
+
+1. Add the case ID to `completed_case_ids`.
+2. Remove the case ID from `failed_cases`.
+3. Persist the updated checkpoint.
+4. Continue to the next eligible case.
+
+Expected state:
+
+```text
+Before:
+
+completed_case_ids = []
+
+failed_cases = {
+    case_001: quota failure
+}
+```
+
+After successful resume:
+
+```text
+completed_case_ids = [
+    case_001
+]
+
+failed_cases = {}
+```
+
+---
+
+## 5. Quota is still exhausted
+
+If the resumed benchmark encounters another daily quota exhaustion:
+
+1. Record/update the case in `failed_cases`.
+2. Do NOT add it to `completed_case_ids`.
+3. Persist the checkpoint immediately.
+4. Abort the live benchmark cleanly.
+5. Return exit code `1`.
+6. Do NOT repeatedly retry the same permanent quota failure.
+7. Do NOT wait for the provider's long retry timer.
+
+The existing provider-level permanent quota detection must remain intact.
+
+---
+
+# 6. Preserve Research-Paper Benchmark Scope
+
+This phase is ONLY about the live research-paper evaluation benchmark.
+
+Do NOT modify:
+
+* research-paper benchmark dataset
+* verification agents
+* evidence ranking
+* retrieval algorithms
+* citation verification logic
+* offline evaluation logic
+* verdict classification
+* production application behavior
+
+The benchmark cases themselves must remain unchanged.
+
+---
+
+# 7. Checkpoint Safety
+
+Preserve the existing checkpoint architecture.
+
+Do not remove or redesign:
+
+* `run_id`
+* `completed_case_ids`
+* `failed_cases`
+* timestamp
+* atomic checkpoint writing
+* checkpoint directory support
+
+The checkpoint must remain safe if the process is interrupted.
+
+---
+
+# 8. CLI Compatibility
+
+Both commands must continue working:
+
+```powershell
+python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir ./evaluation/checkpoints/phase17 --resume
+```
+
+and:
+
+```powershell
+python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir ./evaluation/checkpoints/phase17 --resume-live
+```
+
+`--resume-live` must remain an alias for `--resume`.
+
+---
+
+# 9. Tests
+
+Add/update tests for the following.
+
+### Test A — Completed research-paper case is skipped
+
+Given a case exists in:
+
+```text
+completed_case_ids
+```
+
+verify that resume does not execute it.
+
+### Test B — Quota-failed research-paper case is retried
+
+Given:
+
+```json
+{
+  "failed_cases": {
+    "case_001": {
+      "category": "llm_failure",
+      "reason": "LLM quota exhausted (daily token limit reached)."
+    }
+  }
+}
+```
+
+verify that `--resume-live` attempts `case_001`.
+
+### Test C — Successful retry clears failure
+
+After successful evaluation:
+
+```text
+case_001 ∈ completed_case_ids
+case_001 ∉ failed_cases
+```
+
+### Test D — Quota failure remains retryable
+
+If the retry encounters quota exhaustion again:
+
+```text
+case_001 ∉ completed_case_ids
+case_001 ∈ failed_cases
+```
+
+and the evaluator exits with:
+
+```text
+exit code 1
+```
+
+### Test E — Non-quota failures preserve existing behavior
+
+Verify that a generic failure is NOT automatically converted into a retryable quota failure.
+
+### Test F — CLI alias
 
 Verify:
 
@@ -186,84 +296,140 @@ Verify:
 --resume-live
 ```
 
-loads the checkpoint and skips already completed cases.
+correctly enables the existing resume behavior.
 
-#### Offline regression
+---
 
-Ensure the existing offline evaluation remains unchanged.
-
-Use mocks for LLM calls. Do NOT consume real Groq quota during tests.
-
-## Testing
+# 10. Full Regression Test
 
 Run:
 
 ```powershell
-cd C:\Users\shaki\OneDrive\Desktop\SciVerify\backend
+cd backend
 python -m pytest -q
 ```
 
-The complete suite must pass.
+All existing tests plus the new tests must pass.
 
-Then run:
+Do not weaken or remove existing tests just to make the new tests pass.
 
-```powershell
-git diff --check
-git status
-```
+---
 
-Fix any trailing whitespace or formatting problems.
+# 11. Validate the Existing Phase 17 Checkpoint
 
-## Important Safety Constraints
-
-Do NOT modify:
-
-* verification agent logic
-* evidence ranking
-* retrieval algorithms
-* verdict determination
-* offline benchmark fixtures
-* `.env`
-* API keys
-* Groq configuration
-* unrelated production logic
-
-Keep the changes narrowly scoped to:
+Do NOT manually edit or delete:
 
 ```text
-live evaluation
-quota-abort flow
-result/exit-code handling
-partial reporting
-checkpoint/resume behavior
-tests
+backend/evaluation/checkpoints/phase17/live_checkpoint.json
 ```
 
-## Do NOT Run a Real Live Benchmark
+Use the existing checkpoint to validate the new resume behavior.
 
-Do not execute:
+After implementation, run:
 
 ```powershell
-python -m app.evaluation.run --live ...
+python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir ./evaluation/checkpoints/phase17 --resume-live
 ```
 
-during implementation.
+### If Groq quota is still exhausted
 
-The current Groq daily token quota is exhausted, and the purpose of this phase is to fix the control flow using mocked tests.
+Expected behavior:
 
-Only run the full pytest suite and other non-quota-consuming validation.
+```text
+Resuming from checkpoint...
+Retrying quota-failed cases...
+LLM quota exhausted...
+Checkpoint saved
+Live evaluation interrupted
+Exit code: 1
+```
 
-## Final Output
+The process should stop quickly rather than hanging for several minutes.
+
+### If Groq quota has reset
+
+The 15 previously quota-failed research-paper cases should actually be attempted.
+
+Successful cases should move into:
+
+```text
+completed_case_ids
+```
+
+Remaining quota failures should stay in:
+
+```text
+failed_cases
+```
+
+---
+
+# 12. Validation Output
 
 After implementation, report:
 
-1. Files changed.
-2. Root cause of the `int has no attribute aggregate` error.
-3. How the result/exit-code flow was fixed.
-4. How quota-abort behavior now works.
-5. Tests added/updated.
-6. Final pytest result.
-7. `git diff --check` result.
-8. Whether the working tree is clean or what remains to commit.
+```text
+Tests:
+XXX passed
 
-Do not modify unrelated files or automatically start another implementation phase.
+Resume behavior:
+PASS / FAIL
+
+Quota-failed cases retryable:
+PASS / FAIL
+
+Completed cases skipped:
+PASS / FAIL
+
+Checkpoint persistence:
+PASS / FAIL
+
+Quota abort:
+PASS / FAIL
+
+--resume-live alias:
+PASS / FAIL
+```
+
+Do not claim that the real live benchmark succeeded unless the external LLM provider actually allowed the calls.
+
+---
+
+## Constraints
+
+* No API keys or `.env` modifications.
+* No benchmark dataset modifications.
+* No changes to verification agents.
+* No changes to evidence ranking.
+* No changes to offline evaluation logic.
+* No unnecessary refactoring.
+* Do not consume external LLM quota merely for testing if unit/mock tests can validate the behavior.
+* Preserve all existing Phase 17 quota-abort functionality.
+
+## Success Criteria
+
+Phase 17.2 is complete when:
+
+```text
+Research-paper live benchmark
+        ↓
+LLM quota exhausted
+        ↓
+Checkpoint saved
+        ↓
+Process exits cleanly
+        ↓
+Quota resets
+        ↓
+--resume-live
+        ↓
+Previously successful cases skipped
+        ↓
+Previously quota-failed cases retried
+        ↓
+Successful retries → completed_case_ids
+        ↓
+Remaining quota failures → failed_cases
+```
+
+The final implementation must pass the complete test suite and preserve all existing SciVerify functionality.

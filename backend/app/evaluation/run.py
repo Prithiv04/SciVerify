@@ -293,12 +293,18 @@ def _run_live_evaluation(
     failure_category_counts: dict[str, int] = {}
 
     for case in live_eligible_cases:
-        # Skip cases already processed in a previous run (either completed or failed)
-        if case.id in completed_ids or case.id in checkpoint_state.get("failed_cases", {}):
+        # Skip cases already processed in a previous run (completed cases)
+        if case.id in completed_ids:
             continue
+        # Determine if we should skip a previously failed case
+        failed_info = checkpoint_state.get("failed_cases", {}).get(case.id)
+        if failed_info is not None:
+            # Retry only if the failure was due to quota exhaustion
+            if failed_info.get("category") != LiveFailureCategory.LLM_QUOTA_EXCEEDED.name:
+                continue
 
-        if quota_pause_seconds > 0:
-            time.sleep(quota_pause_seconds)
+            if quota_pause_seconds > 0:
+                time.sleep(quota_pause_seconds)
 
         live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
         live_case_results.append(live_result)
@@ -311,6 +317,9 @@ def _run_live_evaluation(
             live_metrics.successfully_evaluated_count += 1
             # Update checkpoint with successful case
             checkpoint_state["completed_case_ids"].append(case.id)
+            # If this case was previously recorded as a failure, remove it
+            if case.id in checkpoint_state.get("failed_cases", {}):
+                del checkpoint_state["failed_cases"][case.id]
             if checkpoint_path:
                 save_checkpoint(checkpoint_state, checkpoint_path)
         else:
