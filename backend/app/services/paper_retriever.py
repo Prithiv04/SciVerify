@@ -68,6 +68,8 @@ class FullTextCandidate:
     url: str
     format: DocumentFormat
     provider: str
+    # Optional tag used internally for ranking; "repository" or "publisher"
+    source_type: str = "unknown"
 
 
 def retrieve_paper(
@@ -109,16 +111,32 @@ def retrieve_paper(
                 source=source,
             )
 
-        candidates = (
+        openalex_candidates = (
             discover_full_text_candidates(openalex_work)
             if openalex_work is not None
             else []
         )
-        has_pmc = any(c.provider in ("pmc", "europepmc") or "pmc" in c.url.lower() for c in candidates)
-        if not has_pmc:
-            epmc_candidates = _discover_europe_pmc_candidates(normalized, http_client)
-            if epmc_candidates:
-                candidates = _order_candidates(_dedupe_candidates(epmc_candidates + candidates))
+
+        # Phase 20: always query Europe PMC regardless of OpenAlex hits (PMC is authoritative)
+        epmc_candidates = _discover_europe_pmc_candidates(normalized, http_client)
+
+        # Phase 20: query Unpaywall for additional OA repository candidates
+        unpaywall_candidates = _discover_unpaywall_candidates(normalized, http_client)
+
+        # Phase 20: query Semantic Scholar for OA PDF candidates not already found
+        s2_candidates = _discover_semantic_scholar_candidates(normalized, http_client)
+
+        all_raw = epmc_candidates + openalex_candidates + unpaywall_candidates + s2_candidates
+        candidates = _order_candidates(_dedupe_candidates(all_raw))
+        logger.info(
+            "Candidate discovery complete: doi=%s total=%d sources=epmc:%d openalex:%d unpaywall:%d s2:%d",
+            normalized,
+            len(candidates),
+            len(epmc_candidates),
+            len(openalex_candidates),
+            len(unpaywall_candidates),
+            len(s2_candidates),
+        )
 
         if not candidates:
             paper.full_text_available = False
@@ -340,14 +358,15 @@ def _dedupe_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCand
 
 def _candidate_priority(candidate: FullTextCandidate) -> tuple[int, int]:
     """Return sort key for candidate full-text sources.
-    
-    Priority tiers:
-    0: PMC PDF (direct open access repository PDF)
-    1: Europe PMC / PMC HTML (open repository HTML)
-    2: Other OA repository PDF (e.g. arXiv, repositories)
-    3: Other OA repository HTML
-    4: Publisher / general OA PDF
-    5: Publisher / general OA HTML
+
+    Phase 20 — Universal Legal Retrieval tier ordering:
+    Tier 0: PMC PDF (pmc.ncbi.nlm.nih.gov — direct, open, authoritative)
+    Tier 1: Europe PMC HTML / PMC HTML (europepmc.org, ncbi.nlm.nih.gov/pmc — open)
+    Tier 2: OA repository PDF (arXiv, Unpaywall repository, institutional repos)
+    Tier 3: OA repository HTML
+    Tier 4: Semantic Scholar OA PDF (mixed OA sources)
+    Tier 5: Publisher OA PDF (only legitimate open-access publisher URLs)
+    Tier 6: Publisher OA HTML / landing pages
     """
     url_lower = candidate.url.lower()
     is_pmc = (
@@ -356,7 +375,13 @@ def _candidate_priority(candidate: FullTextCandidate) -> tuple[int, int]:
         or "ncbi.nlm.nih.gov/pmc" in url_lower
     )
     is_europe_pmc = candidate.provider == "europepmc" or "europepmc.org" in url_lower
-    is_repo = _is_known_oa_repository(candidate.url) or "arxiv.org" in url_lower
+    is_unpaywall_repo = candidate.provider == "unpaywall" and candidate.source_type == "repository"
+    is_s2 = candidate.provider == "semanticscholar"
+    is_repo = (
+        _is_known_oa_repository(candidate.url)
+        or "arxiv.org" in url_lower
+        or is_unpaywall_repo
+    )
 
     if is_pmc and candidate.format == "pdf":
         return (0, 0)
@@ -368,9 +393,13 @@ def _candidate_priority(candidate: FullTextCandidate) -> tuple[int, int]:
         return (2, 0)
     if is_repo:
         return (2, 1)
+    if is_s2 and candidate.format == "pdf":
+        return (4, 0)
+    if is_s2:
+        return (4, 1)
     if candidate.format == "pdf":
-        return (3, 0)
-    return (3, 1)
+        return (5, 0)
+    return (6, 0)
 
 
 def _order_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCandidate]:
@@ -426,8 +455,16 @@ def _discover_europe_pmc_candidates(
     doi: str,
     client: httpx.Client,
 ) -> list[FullTextCandidate]:
-    """Query Europe PMC REST API by DOI to discover PMC/Europe PMC full-text mirrors."""
-    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:{doi}&format=json"
+    """Query Europe PMC REST API by DOI to discover PMC/Europe PMC full-text mirrors.
+
+    Returns PMC PDF (Tier 0) and Europe PMC HTML (Tier 1) candidates when the
+    paper has a PMCID record, which indicates it is freely available via NIH
+    Open Access policy. Never bypasses paywalls or anti-bot protections.
+    """
+    url = (
+        f"https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+        f"?query=DOI:{doi}&format=json"
+    )
     try:
         response = client.get(url, timeout=10.0)
         if response.status_code != 200:
@@ -442,20 +479,150 @@ def _discover_europe_pmc_candidates(
         normalized_id = pmcid.strip()
         if not normalized_id.upper().startswith("PMC"):
             normalized_id = f"PMC{normalized_id}"
+        logger.debug("Europe PMC discovery found PMCID=%s for doi=%s", normalized_id, doi)
         return [
             FullTextCandidate(
                 url=f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/",
                 format="pdf",
                 provider="pmc",
+                source_type="repository",
             ),
             FullTextCandidate(
                 url=f"https://europepmc.org/articles/{normalized_id}",
                 format="html",
                 provider="europepmc",
+                source_type="repository",
             ),
         ]
     except Exception as exc:
         logger.debug("Europe PMC candidate discovery failed: doi=%s reason=%s", doi, exc)
+        return []
+
+
+_UNPAYWALL_EMAIL = "team@sciverify.local"
+_KNOWN_REPOSITORY_HOSTS = (
+    "arxiv.org",
+    "biorxiv.org",
+    "medrxiv.org",
+    "europepmc.org",
+    "ncbi.nlm.nih.gov/pmc",
+    "pmc.ncbi.nlm.nih.gov",
+    "pubmedcentral.nih.gov",
+    "escholarship.org",
+    "repository.",
+    "zenodo.org",
+    "figshare.com",
+    "osf.io",
+    "ssrn.com",
+    "researchgate.net",
+    "academia.edu",
+    "institutional",
+)
+
+
+def _is_repository_url(url: str) -> bool:
+    """Return True if a URL appears to be from an OA repository (not a publisher)."""
+    lower = url.lower()
+    return any(host in lower for host in _KNOWN_REPOSITORY_HOSTS)
+
+
+def _discover_unpaywall_candidates(
+    doi: str,
+    client: httpx.Client,
+) -> list[FullTextCandidate]:
+    """Query Unpaywall API for open-access PDF/HTML locations.
+
+    Tier 2: Repository PDFs (arXiv, institutional, Zenodo, bioRxiv, etc.)
+    Tier 3: Repository HTML
+    Tier 5: Publisher OA PDFs (only if legitimately open access)
+    Never includes paywalled or subscription-required content.
+    """
+    url = f"https://api.unpaywall.org/v2/{doi}?email={_UNPAYWALL_EMAIL}"
+    candidates: list[FullTextCandidate] = []
+    try:
+        response = client.get(url, timeout=10.0)
+        if response.status_code != 200:
+            logger.debug("Unpaywall returned %d for doi=%s", response.status_code, doi)
+            return []
+        data = response.json()
+        if not data.get("is_oa"):
+            logger.debug("Unpaywall: doi=%s is not open-access", doi)
+            return []
+        oa_locations: list[dict[str, Any]] = data.get("oa_locations") or []
+        for loc in oa_locations:
+            if not isinstance(loc, dict):
+                continue
+            host_type = loc.get("host_type", "unknown")
+            pdf_url = loc.get("url_for_pdf")
+            landing_url = loc.get("url")
+
+            # Only accept PDFs from Unpaywall (landing pages are too risky)
+            if isinstance(pdf_url, str) and pdf_url.strip():
+                source_type = "repository" if host_type == "repository" else "publisher"
+                candidates.append(
+                    FullTextCandidate(
+                        url=pdf_url.strip(),
+                        format="pdf",
+                        provider="unpaywall",
+                        source_type=source_type,
+                    )
+                )
+            elif isinstance(landing_url, str) and landing_url.strip() and host_type == "repository":
+                # Accept HTML landing pages only from known OA repositories
+                candidates.append(
+                    FullTextCandidate(
+                        url=landing_url.strip(),
+                        format=_format_from_url(landing_url),
+                        provider="unpaywall",
+                        source_type="repository",
+                    )
+                )
+        logger.debug("Unpaywall discovery: doi=%s candidates=%d", doi, len(candidates))
+        return candidates
+    except Exception as exc:
+        logger.debug("Unpaywall candidate discovery failed: doi=%s reason=%s", doi, exc)
+        return []
+
+
+def _discover_semantic_scholar_candidates(
+    doi: str,
+    client: httpx.Client,
+) -> list[FullTextCandidate]:
+    """Query Semantic Scholar for an open-access PDF URL.
+
+    Tier 4: Semantic Scholar OA PDF (mixed OA provenance).
+    Only returns PDF candidates; landing pages from S2 are not used.
+    Never bypasses paywalls or access controls.
+    """
+    url = (
+        f"https://api.semanticscholar.org/graph/v1/paper/DOI:{doi}"
+        f"?fields=openAccessPdf,isOpenAccess"
+    )
+    try:
+        response = client.get(url, timeout=10.0)
+        if response.status_code != 200:
+            logger.debug("Semantic Scholar returned %d for doi=%s", response.status_code, doi)
+            return []
+        data = response.json()
+        if not data.get("isOpenAccess"):
+            return []
+        oa_pdf = data.get("openAccessPdf")
+        if not isinstance(oa_pdf, dict):
+            return []
+        pdf_url = oa_pdf.get("url")
+        if not isinstance(pdf_url, str) or not pdf_url.strip():
+            return []
+        logger.debug("Semantic Scholar OA PDF: doi=%s url=%s", doi, pdf_url)
+        return [
+            FullTextCandidate(
+                url=pdf_url.strip(),
+                format="pdf",
+                provider="semanticscholar",
+                source_type="repository" if _is_repository_url(pdf_url) else "publisher",
+            )
+        ]
+    except Exception as exc:
+        logger.debug("Semantic Scholar discovery failed: doi=%s reason=%s", doi, exc)
         return []
 
 
@@ -580,5 +747,8 @@ __all__ = [
     "PaperProviderError",
     "discover_full_text",
     "discover_full_text_candidates",
+    "_discover_europe_pmc_candidates",
+    "_discover_unpaywall_candidates",
+    "_discover_semantic_scholar_candidates",
     "retrieve_paper",
 ]

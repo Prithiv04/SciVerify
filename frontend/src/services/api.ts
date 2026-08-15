@@ -40,12 +40,23 @@ function formatApiError(error: unknown): string {
   }
 
   if (status === 404) {
-    return detail ?? 'The cited paper could not be found.'
+    return (
+      detail ??
+      'The cited paper could not be found. Please check the DOI and try again.'
+    )
   }
 
   if (status === 503) {
-    if (detail?.toLowerCase().includes('full text')) {
-      return 'Full text could not be retrieved from the available sources. Please try another paper.'
+    const lowerDetail = detail?.toLowerCase() ?? ''
+    if (
+      lowerDetail.includes('full text') ||
+      lowerDetail.includes('unavailable') ||
+      lowerDetail.includes('open access')
+    ) {
+      return (
+        'Citation found, but the full text could not be retrieved from any permitted open-access source. ' +
+        'The paper may require a subscription or is not yet deposited in an open repository.'
+      )
     }
     return detail ?? "The cited paper's full text could not be retrieved."
   }
