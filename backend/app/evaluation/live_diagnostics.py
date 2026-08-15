@@ -269,71 +269,104 @@ def evaluate_live_case(
 ) -> tuple[LiveCaseResult, VerificationResponse | None]:
     """Evaluate a single live case with full diagnostics tracking.
 
+    Captures every URL attempted during retrieval via a thin monkey-patch on
+    ``retrieve_document`` in the paper_retriever module.  The patch is always
+    removed in a ``finally`` block so callers are not affected.
+
     Returns:
         A tuple of (LiveCaseResult, VerificationResponse | None).
         The response is None if the case failed or was skipped.
     """
     from app.evaluation.evaluator import evaluate_case
+    from app.schemas.verification import VerificationStatus
 
     start_time = time.time()
     retrieval_attempts = 0
+    actual_verdict = None
+    confidence = None
     failure_category: LiveFailureCategory | None = None
     failure_reason: str | None = None
     status = "failed"
-    actual_verdict: Verdict | None = None
-    confidence: float | None = None
     response: VerificationResponse | None = None
 
+    # ------------------------------------------------------------------
+    # URL-tracking: monkey-patch retrieve_document so that every URL
+    # actually attempted during this case is recorded in url_history.
+    # ------------------------------------------------------------------
+    url_history: list[str] = []
+    import importlib
+    paper_retriever_mod = importlib.import_module("app.services.paper_retriever")
+    _original_retrieve_document = getattr(paper_retriever_mod, "retrieve_document")
+
+    def _patched_retrieve_document(url: str, *args, **kwargs):  # type: ignore[misc]
+        url_history.append(url)
+        return _original_retrieve_document(url, *args, **kwargs)
+
+    setattr(paper_retriever_mod, "retrieve_document", _patched_retrieve_document)
     try:
-        def _run_verification():
-            return analyze_verification(case.claim, case.doi)
+        # ------------------------------------------------------------------
+        # Inner try/except: call the verifier and process its response.
+        # ------------------------------------------------------------------
+        try:
+            def _run_verification() -> VerificationResponse:
+                return analyze_verification(case.doi, case.claim)
 
-        response, category, reason, attempts = execute_with_retry(_run_verification, case.id)
-        retrieval_attempts = attempts
+            response_raw, _cat, _reason, attempts = execute_with_retry(_run_verification, case.id)
+            retrieval_attempts = attempts
+            response = response_raw
 
-        # Evaluate the response
-        if response.status == VerificationStatus.INSUFFICIENT_EVIDENCE:
-            status = "skipped"
-            failure_category = LiveFailureCategory.FULL_TEXT_UNAVAILABLE
-            failure_reason = response.reasoning or response.detail or "Insufficient evidence available for verification."
-            response = None
-        elif response.status in (VerificationStatus.LLM_UNAVAILABLE, VerificationStatus.VERIFICATION_FAILED):
-            status = "failed"
-            failure_reason = response.detail or f"Verification ended with status: {response.status.value}"
-            msg = failure_reason.lower()
-            if "tokens per day" in msg or "tpd" in msg or "quota" in msg or "daily token limit" in msg:
-                failure_category = LiveFailureCategory.LLM_QUOTA_EXCEEDED
-            elif "timed out" in msg or "timeout" in msg:
-                failure_category = LiveFailureCategory.LLM_TIMEOUT
+            if response.status == VerificationStatus.INSUFFICIENT_EVIDENCE:
+                status = "skipped"
+                failure_category = LiveFailureCategory.FULL_TEXT_UNAVAILABLE
+                failure_reason = (
+                    getattr(response, "reasoning", None)
+                    or response.detail
+                    or "Insufficient evidence available for verification."
+                )
+                response = None
+            elif response.status in (
+                VerificationStatus.LLM_UNAVAILABLE,
+                VerificationStatus.VERIFICATION_FAILED,
+            ):
+                status = "failed"
+                failure_reason = response.detail or f"Verification ended with status: {response.status.value}"
+                msg = failure_reason.lower()
+                if "tokens per day" in msg or "tpd" in msg or "quota" in msg or "daily token limit" in msg:
+                    failure_category = LiveFailureCategory.LLM_QUOTA_EXCEEDED
+                elif "timed out" in msg or "timeout" in msg:
+                    failure_category = LiveFailureCategory.LLM_TIMEOUT
+                else:
+                    failure_category = LiveFailureCategory.LLM_FAILURE
+                response = None
+            elif response.status == VerificationStatus.SUCCESS:
+                case_metrics = evaluate_case(case.id, case.expected_verdict, response)
+                actual_verdict = case_metrics.actual_verdict
+                confidence = case_metrics.confidence
+                status = "evaluated"
             else:
-                failure_category = LiveFailureCategory.LLM_FAILURE
-            response = None
-        elif response.status == VerificationStatus.SUCCESS:
-            case_metrics = evaluate_case(case.id, case.expected_verdict, response)
-            actual_verdict = case_metrics.actual_verdict
-            confidence = case_metrics.confidence
-            status = "evaluated"
-        else:
-            status = "failed"
-            failure_category = LiveFailureCategory.UNKNOWN_FAILURE
-            failure_reason = response.detail or f"Unexpected verification status: {response.status}"
-            response = None
+                status = "failed"
+                failure_category = LiveFailureCategory.UNKNOWN_FAILURE
+                failure_reason = response.detail or f"Unexpected verification status: {response.status}"
+                response = None
 
-    except Exception as exc:
-        failure_category = classify_exception(exc)
-        failure_reason = str(exc)
-        status = "skipped" if failure_category in RETRIEVAL_FAILURE_CATEGORIES else "failed"
-        # For deterministic failures, attempts is already set to 1 by execute_with_retry
-        # For other failures, we need to track the actual attempts
-        retrieval_attempts = max_retries + 1 if failure_category not in DETERMINISTIC_FAILURE_CATEGORIES else 1
-        logger.error(
-            "Case %s %s after %d attempts: category=%s reason=%s",
-            case.id,
-            status,
-            retrieval_attempts,
-            failure_category,
-            failure_reason,
-        )
+        except Exception as exc:
+            failure_category = classify_exception(exc)
+            failure_reason = str(exc)
+            status = "skipped" if failure_category in RETRIEVAL_FAILURE_CATEGORIES else "failed"
+            retrieval_attempts = (
+                1 if failure_category in DETERMINISTIC_FAILURE_CATEGORIES else max_retries + 1
+            )
+            logger.error(
+                "Case %s %s after %d attempts: category=%s reason=%s",
+                case.id,
+                status,
+                retrieval_attempts,
+                failure_category,
+                failure_reason,
+            )
+    finally:
+        # Always restore the original function regardless of outcome.
+        setattr(paper_retriever_mod, "retrieve_document", _original_retrieve_document)
 
     elapsed_seconds = time.time() - start_time
 
@@ -347,7 +380,7 @@ def evaluate_live_case(
         failure_reason=failure_reason,
         retrieval_attempts=retrieval_attempts,
         elapsed_seconds=elapsed_seconds,
-        candidate_urls=[],  # TODO: populate with actual URLs if available
+        candidate_urls=list(url_history),
         retrieval_elapsed_ms=int(elapsed_seconds * 1000),
     )
 
