@@ -469,6 +469,196 @@ class TestRetrievePaper:
         assert len(result.sections) == 0
         assert "403" in (result.detail or "")
 
+    @patch("app.services.paper_retriever.chunk_sections")
+    @patch("app.services.paper_retriever.parse_document")
+    @patch("app.services.paper_retriever.retrieve_document")
+    @patch("app.services.paper_retriever._fetch_openalex_work")
+    @patch("app.services.paper_retriever.resolve_doi")
+    def test_pmc_preferred_over_publisher(
+        self,
+        mock_resolve: MagicMock,
+        mock_openalex: MagicMock,
+        mock_retrieve: MagicMock,
+        mock_parse: MagicMock,
+        mock_chunk: MagicMock,
+    ) -> None:
+        from app.schemas.paper import DocumentSection, EvidenceChunk
+
+        mock_resolve.return_value = CITATION
+        mock_openalex.return_value = {
+            "id": "https://openalex.org/W123",
+            "open_access": {"is_oa": True},
+            "best_oa_location": {
+                "pdf_url": "https://publisher.com/paper.pdf",
+                "landing_page_url": "https://doi.org/10.1038/example",
+            },
+            "locations": [
+                {
+                    "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8371605",
+                    "is_oa": True,
+                },
+                {
+                    "pdf_url": "https://publisher.com/paper.pdf",
+                    "is_oa": True,
+                },
+            ],
+        }
+        pmc_doc = MagicMock(
+            content=b"%PDF-1.4 PMC content",
+            text=None,
+            format="pdf",
+            content_type="application/pdf",
+            source_url="https://pmc.ncbi.nlm.nih.gov/articles/PMC8371605/pdf/",
+        )
+        mock_retrieve.return_value = pmc_doc
+        mock_parse.return_value = [
+            DocumentSection(section_name="Methods", text="PMC extracted evidence.", order=0)
+        ]
+        mock_chunk.return_value = [
+            EvidenceChunk(
+                chunk_id="chunk-pmc-1",
+                paper_id=CITATION.doi,
+                section="Methods",
+                chunk_index=0,
+                text="PMC extracted evidence.",
+            )
+        ]
+
+        result = retrieve_paper(CITATION.doi, client=MagicMock())
+
+        assert result.status == PaperRetrievalStatus.SUCCESS
+        assert result.source.provider == "pmc"
+        assert result.paper.full_text_url == "https://pmc.ncbi.nlm.nih.gov/articles/PMC8371605/pdf/"
+        # Ensure PMC was tried on the very first call
+        first_call_url = mock_retrieve.call_args_list[0].args[0]
+        assert "pmc.ncbi.nlm.nih.gov" in first_call_url
+
+    @patch("app.services.paper_retriever.chunk_sections")
+    @patch("app.services.paper_retriever.parse_document")
+    @patch("app.services.paper_retriever.retrieve_document")
+    @patch("app.services.paper_retriever._fetch_openalex_work")
+    @patch("app.services.paper_retriever.resolve_doi")
+    def test_europe_pmc_fallback_when_pmc_fails(
+        self,
+        mock_resolve: MagicMock,
+        mock_openalex: MagicMock,
+        mock_retrieve: MagicMock,
+        mock_parse: MagicMock,
+        mock_chunk: MagicMock,
+    ) -> None:
+        from app.schemas.paper import DocumentSection, EvidenceChunk
+        from app.services.document_retriever import DocumentRetrievalError
+
+        mock_resolve.return_value = CITATION
+        mock_openalex.return_value = {
+            "id": "https://openalex.org/W123",
+            "open_access": {"is_oa": True},
+            "best_oa_location": {
+                "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8371605",
+                "is_oa": True,
+            },
+            "locations": [],
+        }
+        europe_pmc_doc = MagicMock(
+            content=b"<html><body><p>Europe PMC content</p></body></html>",
+            text="<html><body><p>Europe PMC content</p></body></html>",
+            format="html",
+            content_type="text/html",
+            source_url="https://europepmc.org/articles/PMC8371605",
+        )
+        # PMC PDF fails, PMC HTML fails, Europe PMC HTML succeeds
+        mock_retrieve.side_effect = [
+            DocumentRetrievalError("PMC PDF download failed 404"),
+            DocumentRetrievalError("PMC HTML download failed 404"),
+            europe_pmc_doc,
+        ]
+        mock_parse.return_value = [
+            DocumentSection(section_name="Results", text="Europe PMC evidence.", order=0)
+        ]
+        mock_chunk.return_value = [
+            EvidenceChunk(
+                chunk_id="chunk-epmc-1",
+                paper_id=CITATION.doi,
+                section="Results",
+                chunk_index=0,
+                text="Europe PMC evidence.",
+            )
+        ]
+
+        result = retrieve_paper(CITATION.doi, client=MagicMock())
+
+        assert result.status == PaperRetrievalStatus.SUCCESS
+        assert result.source.provider == "europepmc"
+        assert result.source.url == "https://europepmc.org/articles/PMC8371605"
+        assert len(result.chunks) == 1
+
+    @patch("app.services.paper_retriever.chunk_sections")
+    @patch("app.services.paper_retriever.parse_document")
+    @patch("app.services.paper_retriever.retrieve_document")
+    @patch("app.services.paper_retriever._fetch_openalex_work")
+    @patch("app.services.paper_retriever.resolve_doi")
+    def test_publisher_fallback_when_pmc_and_europepmc_fail(
+        self,
+        mock_resolve: MagicMock,
+        mock_openalex: MagicMock,
+        mock_retrieve: MagicMock,
+        mock_parse: MagicMock,
+        mock_chunk: MagicMock,
+    ) -> None:
+        from app.schemas.paper import DocumentSection, EvidenceChunk
+        from app.services.document_retriever import DocumentRetrievalError
+
+        mock_resolve.return_value = CITATION
+        mock_openalex.return_value = {
+            "id": "https://openalex.org/W123",
+            "open_access": {"is_oa": True},
+            "best_oa_location": {
+                "pdf_url": "https://publisher.com/paper.pdf",
+                "is_oa": True,
+            },
+            "locations": [
+                {
+                    "landing_page_url": "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8371605",
+                    "is_oa": True,
+                },
+                {
+                    "pdf_url": "https://publisher.com/paper.pdf",
+                    "is_oa": True,
+                },
+            ],
+        }
+        publisher_doc = MagicMock(
+            content=b"%PDF-1.4 Publisher OA PDF",
+            text=None,
+            format="pdf",
+            content_type="application/pdf",
+            source_url="https://publisher.com/paper.pdf",
+        )
+        # PMC PDF fails, Europe PMC HTML fails, PMC HTML fails -> publisher PDF succeeds
+        mock_retrieve.side_effect = [
+            DocumentRetrievalError("PMC PDF failed"),
+            DocumentRetrievalError("PMC HTML failed"),
+            DocumentRetrievalError("Europe PMC failed"),
+            publisher_doc,
+        ]
+        mock_parse.return_value = [
+            DocumentSection(section_name="Main", text="Publisher OA content.", order=0)
+        ]
+        mock_chunk.return_value = [
+            EvidenceChunk(
+                chunk_id="chunk-pub-1",
+                paper_id=CITATION.doi,
+                section="Main",
+                chunk_index=0,
+                text="Publisher OA content.",
+            )
+        ]
+
+        result = retrieve_paper(CITATION.doi, client=MagicMock())
+
+        assert result.status == PaperRetrievalStatus.SUCCESS
+        assert result.paper.full_text_url == "https://publisher.com/paper.pdf"
+
 
 class TestOpenAlexFetch:
     @patch("httpx.Client.get")

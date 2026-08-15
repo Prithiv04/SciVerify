@@ -114,6 +114,12 @@ def retrieve_paper(
             if openalex_work is not None
             else []
         )
+        has_pmc = any(c.provider in ("pmc", "europepmc") or "pmc" in c.url.lower() for c in candidates)
+        if not has_pmc:
+            epmc_candidates = _discover_europe_pmc_candidates(normalized, http_client)
+            if epmc_candidates:
+                candidates = _order_candidates(_dedupe_candidates(epmc_candidates + candidates))
+
         if not candidates:
             paper.full_text_available = False
             return RetrievePaperResponse(
@@ -250,6 +256,14 @@ def discover_full_text_candidates(openalex_work: dict[str, Any]) -> list[FullTex
         isinstance(open_access, dict) and open_access.get("is_oa") is True
     )
 
+    def _provider_from_url(url: str, default_provider: str) -> str:
+        lowered = url.lower()
+        if "pmc.ncbi.nlm.nih.gov" in lowered or "ncbi.nlm.nih.gov/pmc" in lowered:
+            return "pmc"
+        if "europepmc.org" in lowered:
+            return "europepmc"
+        return default_provider
+
     def add_candidate(url: str, doc_format: DocumentFormat, provider: str) -> None:
         normalized_url = url.strip()
         if normalized_url:
@@ -257,7 +271,7 @@ def discover_full_text_candidates(openalex_work: dict[str, Any]) -> list[FullTex
                 FullTextCandidate(
                     url=normalized_url,
                     format=doc_format,
-                    provider=provider,
+                    provider=_provider_from_url(normalized_url, provider),
                 )
             )
 
@@ -324,10 +338,43 @@ def _dedupe_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCand
     return deduped
 
 
+def _candidate_priority(candidate: FullTextCandidate) -> tuple[int, int]:
+    """Return sort key for candidate full-text sources.
+    
+    Priority tiers:
+    0: PMC PDF (direct open access repository PDF)
+    1: Europe PMC / PMC HTML (open repository HTML)
+    2: Other OA repository PDF (e.g. arXiv, repositories)
+    3: Other OA repository HTML
+    4: Publisher / general OA PDF
+    5: Publisher / general OA HTML
+    """
+    url_lower = candidate.url.lower()
+    is_pmc = (
+        candidate.provider == "pmc"
+        or "pmc.ncbi.nlm.nih.gov" in url_lower
+        or "ncbi.nlm.nih.gov/pmc" in url_lower
+    )
+    is_europe_pmc = candidate.provider == "europepmc" or "europepmc.org" in url_lower
+    is_repo = _is_known_oa_repository(candidate.url) or "arxiv.org" in url_lower
+
+    if is_pmc and candidate.format == "pdf":
+        return (0, 0)
+    if is_pmc:
+        return (1, 0)
+    if is_europe_pmc:
+        return (1, 1)
+    if is_repo and candidate.format == "pdf":
+        return (2, 0)
+    if is_repo:
+        return (2, 1)
+    if candidate.format == "pdf":
+        return (3, 0)
+    return (3, 1)
+
+
 def _order_candidates(candidates: list[FullTextCandidate]) -> list[FullTextCandidate]:
-    pdfs = [candidate for candidate in candidates if candidate.format == "pdf"]
-    html = [candidate for candidate in candidates if candidate.format == "html"]
-    return pdfs + html
+    return sorted(candidates, key=_candidate_priority)
 
 
 def _pmc_pdf_url_from_html(url: str) -> str | None:
@@ -353,18 +400,18 @@ def _expand_candidate_mirrors(
 ) -> list[FullTextCandidate]:
     expanded = list(candidates)
     for candidate in candidates:
-        if candidate.format != "html" or "pmc" not in candidate.url.lower():
+        if "pmc" not in candidate.url.lower():
             continue
 
         pdf_url = _pmc_pdf_url_from_html(candidate.url)
-        if pdf_url is not None:
+        if pdf_url is not None and not any(c.url == pdf_url for c in expanded):
             expanded.insert(
                 0,
                 FullTextCandidate(url=pdf_url, format="pdf", provider="pmc"),
             )
 
         europe_pmc_url = _europe_pmc_url_from_pmc_html(candidate.url)
-        if europe_pmc_url is not None:
+        if europe_pmc_url is not None and not any(c.url == europe_pmc_url for c in expanded):
             expanded.append(
                 FullTextCandidate(
                     url=europe_pmc_url,
@@ -373,6 +420,43 @@ def _expand_candidate_mirrors(
                 )
             )
     return expanded
+
+
+def _discover_europe_pmc_candidates(
+    doi: str,
+    client: httpx.Client,
+) -> list[FullTextCandidate]:
+    """Query Europe PMC REST API by DOI to discover PMC/Europe PMC full-text mirrors."""
+    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:{doi}&format=json"
+    try:
+        response = client.get(url, timeout=10.0)
+        if response.status_code != 200:
+            return []
+        data = response.json()
+        results = data.get("resultList", {}).get("result", [])
+        if not results:
+            return []
+        pmcid = results[0].get("pmcid")
+        if not pmcid or not isinstance(pmcid, str):
+            return []
+        normalized_id = pmcid.strip()
+        if not normalized_id.upper().startswith("PMC"):
+            normalized_id = f"PMC{normalized_id}"
+        return [
+            FullTextCandidate(
+                url=f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/",
+                format="pdf",
+                provider="pmc",
+            ),
+            FullTextCandidate(
+                url=f"https://europepmc.org/articles/{normalized_id}",
+                format="html",
+                provider="europepmc",
+            ),
+        ]
+    except Exception as exc:
+        logger.debug("Europe PMC candidate discovery failed: doi=%s reason=%s", doi, exc)
+        return []
 
 
 def _fetch_openalex_work(doi: str, client: httpx.Client) -> dict[str, Any]:
