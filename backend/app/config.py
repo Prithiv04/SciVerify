@@ -1,6 +1,24 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+try:
+    from dotenv import find_dotenv, load_dotenv
+
+    # 1. Try explicit backend directory .env (parent of app package)
+    backend_env = Path(__file__).resolve().parent.parent / ".env"
+    if backend_env.exists():
+        load_dotenv(dotenv_path=backend_env)
+    else:
+        # 2. Try find_dotenv or default search
+        found_env = find_dotenv(usecwd=True)
+        if found_env:
+            load_dotenv(dotenv_path=found_env)
+        else:
+            load_dotenv()
+except ImportError:
+    pass
 
 PAPER_REQUEST_TIMEOUT = float(os.getenv("PAPER_REQUEST_TIMEOUT", "30"))
 MAX_DOCUMENT_SIZE = int(os.getenv("MAX_DOCUMENT_SIZE", str(20 * 1024 * 1024)))
