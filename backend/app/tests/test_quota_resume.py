@@ -5,10 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.evaluation.run import _run_live_evaluation
-from app.evaluation.checkpoint import load_checkpoint
-from app.schemas.verification import LiveFailureCategory, Verdict
+from app.evaluation.checkpoint import load_checkpoint, save_checkpoint
 from app.evaluation.dataset_loader import BenchmarkCase
+from app.evaluation.run import _run_live_evaluation, is_quota_failure, main
+from app.schemas.verification import LiveFailureCategory, Verdict
+
 
 # Helper to create a dummy BenchmarkCase
 def make_case(case_id: str) -> BenchmarkCase:
@@ -20,6 +21,7 @@ def make_case(case_id: str) -> BenchmarkCase:
         description="Generated for quota test",
         live_evaluable=True,
     )
+
 
 # Mock LiveCaseResult similar to what evaluate_live_case returns
 class DummyLiveResult:
@@ -34,26 +36,19 @@ class DummyLiveResult:
         self.retrieval_attempts = 1
         self.elapsed_seconds = 0.1
 
-# ---------------------------------------------------------------------------
-# Test 1 – quota error is detected and classified correctly
-# ---------------------------------------------------------------------------
-def test_quota_error_is_detected_and_classified(tmp_path: Path):
-    # Prepare three cases – the third will trigger quota exhausted
-    cases = [make_case(f"case_{i}") for i in range(1, 4)]
 
-    # Side‑effect sequence for evaluate_live_case:
-    #   1. Successful evaluation
-    #   2. Successful evaluation
-    #   3. Quota exhausted failure
+# ---------------------------------------------------------------------------
+# Test 1 — Canonical quota checkpoint
+# ---------------------------------------------------------------------------
+def test_canonical_quota_checkpoint(tmp_path: Path):
+    cases = [make_case("case_1")]
     side_effects = [
-        (DummyLiveResult(cases[0].id, "evaluated"), MagicMock()),
-        (DummyLiveResult(cases[1].id, "evaluated"), MagicMock()),
         (
             DummyLiveResult(
-                cases[2].id,
+                cases[0].id,
                 "failed",
                 failure_category=LiveFailureCategory.LLM_QUOTA_EXCEEDED,
-                failure_reason="LLM quota exhausted",
+                failure_reason="LLM quota exhausted (daily token limit reached).",
             ),
             None,
         ),
@@ -65,57 +60,6 @@ def test_quota_error_is_detected_and_classified(tmp_path: Path):
     dummy_dataset = type("DummyDataset", (), {"cases": cases})
     with patch("app.evaluation.run.load_dataset", return_value=dummy_dataset), \
          patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=side_effects):
-        # Run live evaluation – it should abort with exit code 1
-        exit_code = _run_live_evaluation(
-            dataset_path=Path("/dev/null"),  # dummy, not used because we patch evaluate_live_case
-            skip_unhealthy=False,
-            checkpoint_dir=checkpoint_dir,
-            resume=False,
-            quota_pause_seconds=0,
-        )
-
-    assert exit_code == 1, "Runner should abort when quota is exceeded"
-
-    # Verify checkpoint contents
-    checkpoint_path = checkpoint_dir / "live_checkpoint.json"
-    assert checkpoint_path.exists(), "Checkpoint file should be written"
-    data = load_checkpoint(checkpoint_path)
-
-    # Completed cases should contain the first two IDs only
-    assert set(data["completed_case_ids"]) == {cases[0].id, cases[1].id}
-    # Failed cases should contain the quota‑failed case with correct category
-    assert cases[2].id in data["failed_cases"]
-    assert data["failed_cases"][cases[2].id]["category"] == LiveFailureCategory.LLM_QUOTA_EXCEEDED.value
-
-# ---------------------------------------------------------------------------
-# Test 2 – resume skips already completed cases and processes remaining ones
-# ---------------------------------------------------------------------------
-def test_resume_behaviour_skips_completed_cases(tmp_path: Path):
-    # Create five cases – first two succeed, third hits quota, fourth & fifth are fresh
-    cases = [make_case(f"case_{i}") for i in range(1, 6)]
-
-    # First run side‑effects (same as previous test, but we also provide a fourth case result)
-    first_run_side_effects = [
-        (DummyLiveResult(cases[0].id, "evaluated"), MagicMock()),
-        (DummyLiveResult(cases[1].id, "evaluated"), MagicMock()),
-        (
-            DummyLiveResult(
-                cases[2].id,
-                "failed",
-                failure_category=LiveFailureCategory.LLM_QUOTA_EXCEEDED,
-                failure_reason="LLM quota exhausted",
-            ),
-            None,
-        ),
-    ]
-
-    checkpoint_dir = tmp_path / "checkpoints"
-    checkpoint_dir.mkdir()
-
-    # ---------- First run – abort on quota ----------
-    dummy_dataset = type("DummyDataset", (), {"cases": cases})
-    with patch("app.evaluation.run.load_dataset", return_value=dummy_dataset), \
-         patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=first_run_side_effects):
         exit_code = _run_live_evaluation(
             dataset_path=Path("/dev/null"),
             skip_unhealthy=False,
@@ -123,17 +67,65 @@ def test_resume_behaviour_skips_completed_cases(tmp_path: Path):
             resume=False,
             quota_pause_seconds=0,
         )
-    assert exit_code == 1
 
-    # ---------- Second run – resume and finish remaining cases ----------
-    # After resume, the first three cases should be skipped. We provide results for case 4 & 5.
-    second_run_side_effects = [
-        (DummyLiveResult(cases[3].id, "evaluated"), MagicMock()),
-        (DummyLiveResult(cases[4].id, "evaluated"), MagicMock()),
+    assert exit_code == 1
+    checkpoint_path = checkpoint_dir / "live_checkpoint.json"
+    assert checkpoint_path.exists()
+    data = load_checkpoint(checkpoint_path)
+    assert data["failed_cases"]["case_1"]["category"] == "LLM_QUOTA_EXCEEDED"
+    assert "LLM quota exhausted" in data["failed_cases"]["case_1"]["reason"]
+
+
+# ---------------------------------------------------------------------------
+# Test 2 — Legacy checkpoint compatibility (retryable)
+# ---------------------------------------------------------------------------
+def test_legacy_checkpoint_compatibility():
+    assert is_quota_failure("llm_failure", "LLM quota exhausted (daily token limit reached).") is True
+    assert is_quota_failure("llm_failure", "tokens per day (TPD) limit reached") is True
+    assert is_quota_failure("LLM_QUOTA_EXCEEDED", "quota error") is True
+    assert is_quota_failure("llm_quota_exceeded", "quota error") is True
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — Non-quota LLM failure (not retryable)
+# ---------------------------------------------------------------------------
+def test_non_quota_llm_failure_not_retryable():
+    assert is_quota_failure("llm_failure", "Some unrelated provider failure") is False
+    assert is_quota_failure("DOI_NOT_FOUND", "Paper not found") is False
+    assert is_quota_failure("FULL_TEXT_UNAVAILABLE", "PDF missing") is False
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — Successful quota retry clears failure and adds to completed
+# ---------------------------------------------------------------------------
+def test_successful_quota_retry_clears_failure(tmp_path: Path):
+    cases = [make_case("case_1"), make_case("case_2")]
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+
+    # Prepopulate checkpoint with case_1 as a legacy quota failure
+    initial_checkpoint = {
+        "run_id": "test-run-123",
+        "completed_case_ids": [],
+        "failed_cases": {
+            "case_1": {
+                "category": "llm_failure",
+                "reason": "LLM quota exhausted (daily token limit reached).",
+            },
+        },
+        "timestamp": "2026-08-15T00:00:00+00:00",
+    }
+    save_checkpoint(initial_checkpoint, checkpoint_dir / "live_checkpoint.json")
+
+    # On resume, case_1 should be retried and succeed, and case_2 should succeed
+    side_effects = [
+        (DummyLiveResult("case_1", "evaluated"), MagicMock()),
+        (DummyLiveResult("case_2", "evaluated"), MagicMock()),
     ]
 
+    dummy_dataset = type("DummyDataset", (), {"cases": cases})
     with patch("app.evaluation.run.load_dataset", return_value=dummy_dataset), \
-         patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=second_run_side_effects):
+         patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=side_effects) as mock_eval:
         exit_code = _run_live_evaluation(
             dataset_path=Path("/dev/null"),
             skip_unhealthy=False,
@@ -141,13 +133,132 @@ def test_resume_behaviour_skips_completed_cases(tmp_path: Path):
             resume=True,
             quota_pause_seconds=0,
         )
-    # No quota error on resume, so the runner should finish successfully (exit code 0)
-    assert exit_code == 0
 
-    # Verify final checkpoint reflects all processed cases
+    assert exit_code == 0
+    assert mock_eval.call_count == 2
     final_data = load_checkpoint(checkpoint_dir / "live_checkpoint.json")
-    expected_completed = {c.id for c in cases[:2]} | {c.id for c in cases[3:5]}
-    assert set(final_data["completed_case_ids"]) == expected_completed
-    # The quota‑failed case remains recorded under failed_cases
-    assert cases[2].id in final_data["failed_cases"]
-    assert final_data["failed_cases"][cases[2].id]["category"] == LiveFailureCategory.LLM_QUOTA_EXCEEDED.value
+    assert "case_1" in final_data["completed_case_ids"]
+    assert "case_2" in final_data["completed_case_ids"]
+    assert "case_1" not in final_data["failed_cases"]
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Repeated quota failure updates category and aborts cleanly
+# ---------------------------------------------------------------------------
+def test_repeated_quota_failure_updates_category_and_aborts(tmp_path: Path):
+    cases = [make_case("case_1")]
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+
+    # Prepopulate checkpoint with case_1 as legacy quota failure
+    initial_checkpoint = {
+        "run_id": "test-run-123",
+        "completed_case_ids": [],
+        "failed_cases": {
+            "case_1": {
+                "category": "llm_failure",
+                "reason": "LLM quota exhausted (daily token limit reached).",
+            },
+        },
+        "timestamp": "2026-08-15T00:00:00+00:00",
+    }
+    save_checkpoint(initial_checkpoint, checkpoint_dir / "live_checkpoint.json")
+
+    # On retry, case_1 encounters quota exhaustion again
+    side_effects = [
+        (
+            DummyLiveResult(
+                "case_1",
+                "failed",
+                failure_category=LiveFailureCategory.LLM_QUOTA_EXCEEDED,
+                failure_reason="LLM quota exhausted (daily token limit reached).",
+            ),
+            None,
+        ),
+    ]
+
+    dummy_dataset = type("DummyDataset", (), {"cases": cases})
+    with patch("app.evaluation.run.load_dataset", return_value=dummy_dataset), \
+         patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=side_effects):
+        exit_code = _run_live_evaluation(
+            dataset_path=Path("/dev/null"),
+            skip_unhealthy=False,
+            checkpoint_dir=checkpoint_dir,
+            resume=True,
+            quota_pause_seconds=0,
+        )
+
+    assert exit_code == 1
+    final_data = load_checkpoint(checkpoint_dir / "live_checkpoint.json")
+    assert "case_1" not in final_data["completed_case_ids"]
+    assert final_data["failed_cases"]["case_1"]["category"] == "LLM_QUOTA_EXCEEDED"
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — Existing Phase 17 checkpoint structure detects 15 retryable cases
+# ---------------------------------------------------------------------------
+def test_phase17_checkpoint_detection():
+    phase17_failed_cases = {
+        f"case_{i}": {
+            "category": "llm_failure",
+            "reason": "LLM quota exhausted (daily token limit reached).",
+        }
+        for i in range(15)
+    }
+    for case_id, info in phase17_failed_cases.items():
+        assert is_quota_failure(info["category"], info["reason"]) is True
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — Completed cases skipped and non-quota failures skipped
+# ---------------------------------------------------------------------------
+def test_completed_and_non_quota_failures_skipped(tmp_path: Path):
+    cases = [make_case("case_1"), make_case("case_2"), make_case("case_3")]
+    checkpoint_dir = tmp_path / "checkpoints"
+    checkpoint_dir.mkdir()
+
+    initial_checkpoint = {
+        "run_id": "test-run-123",
+        "completed_case_ids": ["case_1"],
+        "failed_cases": {
+            "case_2": {
+                "category": "DOI_NOT_FOUND",
+                "reason": "DOI could not be resolved",
+            },
+        },
+        "timestamp": "2026-08-15T00:00:00+00:00",
+    }
+    save_checkpoint(initial_checkpoint, checkpoint_dir / "live_checkpoint.json")
+
+    # Only case_3 should be evaluated
+    side_effects = [
+        (DummyLiveResult("case_3", "evaluated"), MagicMock()),
+    ]
+
+    dummy_dataset = type("DummyDataset", (), {"cases": cases})
+    with patch("app.evaluation.run.load_dataset", return_value=dummy_dataset), \
+         patch("app.evaluation.live_diagnostics.evaluate_live_case", side_effect=side_effects) as mock_eval:
+        exit_code = _run_live_evaluation(
+            dataset_path=Path("/dev/null"),
+            skip_unhealthy=False,
+            checkpoint_dir=checkpoint_dir,
+            resume=True,
+            quota_pause_seconds=0,
+        )
+
+    assert exit_code == 0
+    assert mock_eval.call_count == 1
+    final_data = load_checkpoint(checkpoint_dir / "live_checkpoint.json")
+    assert set(final_data["completed_case_ids"]) == {"case_1", "case_3"}
+    assert "case_2" in final_data["failed_cases"]
+
+
+# ---------------------------------------------------------------------------
+# Test 8 — --resume-live alias CLI compatibility
+# ---------------------------------------------------------------------------
+def test_resume_live_cli_alias():
+    with patch("app.evaluation.run._run_live_evaluation", return_value=0) as mock_live:
+        exit_code = main(["--live", "--resume-live"])
+        assert exit_code == 0
+        _, kwargs = mock_live.call_args
+        assert kwargs["resume"] is True

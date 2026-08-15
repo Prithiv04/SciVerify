@@ -297,8 +297,14 @@ def evaluate_live_case(
             response = None
         elif response.status in (VerificationStatus.LLM_UNAVAILABLE, VerificationStatus.VERIFICATION_FAILED):
             status = "failed"
-            failure_category = LiveFailureCategory.LLM_FAILURE
             failure_reason = response.detail or f"Verification ended with status: {response.status.value}"
+            msg = failure_reason.lower()
+            if "tokens per day" in msg or "tpd" in msg or "quota" in msg or "daily token limit" in msg:
+                failure_category = LiveFailureCategory.LLM_QUOTA_EXCEEDED
+            elif "timed out" in msg or "timeout" in msg:
+                failure_category = LiveFailureCategory.LLM_TIMEOUT
+            else:
+                failure_category = LiveFailureCategory.LLM_FAILURE
             response = None
         elif response.status == VerificationStatus.SUCCESS:
             case_metrics = evaluate_case(case.id, case.expected_verdict, response)

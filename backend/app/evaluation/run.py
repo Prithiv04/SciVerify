@@ -221,6 +221,29 @@ def _run_health_check(dataset_path: Path) -> int:
     return 0
 
 
+def is_quota_failure(category: str | None, reason: str | None) -> bool:
+    """Determine whether a failed case entry represents a quota exhaustion failure."""
+    if category:
+        cat_str = str(category).strip()
+        if cat_str in (
+            LiveFailureCategory.LLM_QUOTA_EXCEEDED.name,
+            LiveFailureCategory.LLM_QUOTA_EXCEEDED.value,
+        ):
+            return True
+        if "quota" in cat_str.lower():
+            return True
+    if reason:
+        r_str = str(reason).lower()
+        if (
+            "quota" in r_str
+            or "tokens per day" in r_str
+            or "tpd" in r_str
+            or "daily token limit" in r_str
+        ):
+            return True
+    return False
+
+
 def _run_live_evaluation(
     dataset_path: Path,
     skip_unhealthy: bool = False,
@@ -271,7 +294,21 @@ def _run_live_evaluation(
     if resume and checkpoint_path and checkpoint_path.exists():
         checkpoint_state = load_checkpoint(checkpoint_path)
         completed_ids = set(checkpoint_state.get("completed_case_ids", []))
+        failed_cases = checkpoint_state.get("failed_cases", {})
+        retryable_count = 0
+        non_retryable_count = 0
+        for case in live_eligible_cases:
+            if case.id in completed_ids:
+                continue
+            f_info = failed_cases.get(case.id)
+            if f_info is not None:
+                if is_quota_failure(f_info.get("category"), f_info.get("reason")):
+                    retryable_count += 1
+                else:
+                    non_retryable_count += 1
         print(f"Resuming from checkpoint with {len(completed_ids)} completed cases.", file=sys.stderr)
+        print(f"Retryable quota-failed cases: {retryable_count}", file=sys.stderr)
+        print(f"Non-retryable failed cases: {non_retryable_count}", file=sys.stderr)
     else:
         checkpoint_state = {
             "run_id": str(uuid.uuid4()),
@@ -300,11 +337,11 @@ def _run_live_evaluation(
         failed_info = checkpoint_state.get("failed_cases", {}).get(case.id)
         if failed_info is not None:
             # Retry only if the failure was due to quota exhaustion
-            if failed_info.get("category") != LiveFailureCategory.LLM_QUOTA_EXCEEDED.name:
+            if not is_quota_failure(failed_info.get("category"), failed_info.get("reason")):
                 continue
 
-            if quota_pause_seconds > 0:
-                time.sleep(quota_pause_seconds)
+        if quota_pause_seconds > 0:
+            time.sleep(quota_pause_seconds)
 
         live_result, response = evaluate_live_case(case, max_retries=MAX_RETRIES)
         live_case_results.append(live_result)
@@ -316,31 +353,39 @@ def _run_live_evaluation(
             cases.append(evaluate_case(case.id, case.expected_verdict, response))
             live_metrics.successfully_evaluated_count += 1
             # Update checkpoint with successful case
-            checkpoint_state["completed_case_ids"].append(case.id)
+            if case.id not in checkpoint_state["completed_case_ids"]:
+                checkpoint_state["completed_case_ids"].append(case.id)
             # If this case was previously recorded as a failure, remove it
             if case.id in checkpoint_state.get("failed_cases", {}):
                 del checkpoint_state["failed_cases"][case.id]
+            checkpoint_state["timestamp"] = datetime.now(timezone.utc).isoformat()
             if checkpoint_path:
                 save_checkpoint(checkpoint_state, checkpoint_path)
         else:
             skipped.append(case.id)
             if live_result.failure_category:
-                category_name = live_result.failure_category.value
-                failure_category_counts[category_name] = failure_category_counts.get(category_name, 0) + 1
-                live_metrics.failure_category_counts[category_name] += 1
+                category_value = live_result.failure_category.value
+                category_name = (
+                    live_result.failure_category.name
+                    if isinstance(live_result.failure_category, LiveFailureCategory)
+                    else str(live_result.failure_category)
+                )
+                failure_category_counts[category_value] = failure_category_counts.get(category_value, 0) + 1
+                live_metrics.failure_category_counts[category_value] += 1
                 if live_result.failure_category in RETRIEVAL_FAILURE_CATEGORIES:
                     live_metrics.retrieval_failure_count += 1
-                    skip_reasons[f"retrieval_{category_name}"] = skip_reasons.get(f"retrieval_{category_name}", 0) + 1
+                    skip_reasons[f"retrieval_{category_value}"] = skip_reasons.get(f"retrieval_{category_value}", 0) + 1
                 else:
                     live_metrics.verification_failure_count += 1
-                    skip_reasons[f"verification_{category_name}"] = skip_reasons.get(f"verification_{category_name}", 0) + 1
+                    skip_reasons[f"verification_{category_value}"] = skip_reasons.get(f"verification_{category_value}", 0) + 1
 
-                print(f"Skipped live case {case.id}: {live_result.failure_category.value} - {live_result.failure_reason}", file=sys.stderr)
-                # Record failure in checkpoint state
+                print(f"Skipped live case {case.id}: {category_value} - {live_result.failure_reason}", file=sys.stderr)
+                # Record failure in checkpoint state using canonical enum name
                 checkpoint_state["failed_cases"][case.id] = {
                     "category": category_name,
                     "reason": live_result.failure_reason,
                 }
+                checkpoint_state["timestamp"] = datetime.now(timezone.utc).isoformat()
                 if checkpoint_path:
                     save_checkpoint(checkpoint_state, checkpoint_path)
                 # Handle quota exceeded abort
