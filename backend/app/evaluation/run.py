@@ -108,6 +108,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Resume live evaluation from checkpoint in --checkpoint-dir.",
     )
     parser.add_argument(
+        "--resume-live",
+        action="store_true",
+        help="Alias for --resume to resume live evaluation.",
+    )
+    parser.add_argument(
         "--quota-pause-seconds",
         type=int,
         default=0,
@@ -119,6 +124,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Support alias --resume-live for backward compatibility
+    if getattr(args, "resume_live", False):
+        args.resume = True
 
     if args.live_health_check:
         return _run_health_check(args.dataset)
@@ -327,7 +336,17 @@ def _run_live_evaluation(
                     if quota_pause_seconds > 0:
                         print(f"Pausing {quota_pause_seconds}s due to quota limit...", file=sys.stderr)
                         time.sleep(quota_pause_seconds)
-                    print("Aborting live evaluation due to LLM quota limit.", file=sys.stderr)
+                    # Print partial run report
+                    print("\nLive Evaluation Interrupted", file=sys.stderr)
+                    print("---------------------------", file=sys.stderr)
+                    print(f"Reason: {live_result.failure_category.value}", file=sys.stderr)
+                    print(f"Live eligible:              {live_metrics.live_eligible_count}", file=sys.stderr)
+                    print(f"Successfully evaluated:    {live_metrics.successfully_evaluated_count}", file=sys.stderr)
+                    print(f"Current quota failure:     1", file=sys.stderr)
+                    remaining = live_metrics.live_eligible_count - (live_metrics.successfully_evaluated_count + 1)
+                    print(f"Remaining:                 {remaining}", file=sys.stderr)
+                    print("\nResults saved.", file=sys.stderr)
+                    print("Resume with:\n\npython -m app.evaluation.run --live --skip-unhealthy --resume-live", file=sys.stderr)
                     return 1
             else:
                 skip_reasons["unknown"] = skip_reasons.get("unknown", 0) + 1
