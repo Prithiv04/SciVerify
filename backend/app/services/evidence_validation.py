@@ -78,15 +78,7 @@ def format_evidence_for_prompt(evidence: list[EvidenceItem]) -> str:
         {
             "chunk_id": item.chunk_id,
             "section": item.section,
-            "chunk_index": item.chunk_index,
             "text": item.text,
-            "relevance_score": item.relevance_score,
-            "claim_overlap": item.claim_overlap,
-            "numeric_overlap": item.numeric_overlap,
-            "claim_numbers": item.claim_numbers,
-            "evidence_numbers": item.evidence_numbers,
-            "source_url": item.source_url,
-            "page": item.page,
         }
         for item in evidence
     ]

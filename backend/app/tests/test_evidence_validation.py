@@ -60,3 +60,31 @@ class TestEvidenceValidation:
         sanitized = sanitize_adjudicator_analysis(analysis, {"c1"})
         assert sanitized.supporting_evidence == ["c1"]
         assert sanitized.contradicting_evidence == []
+
+    def test_format_evidence_for_prompt_is_token_efficient(self) -> None:
+        import json
+        from app.schemas.evidence import EvidenceItem
+        from app.services.evidence_validation import format_evidence_for_prompt
+
+        item = EvidenceItem(
+            chunk_id="chunk_001",
+            section="Results",
+            chunk_index=0,
+            text="Sample evidence text.",
+            relevance_score=0.95,
+            claim_overlap=0.8,
+            numeric_overlap=1.0,
+            claim_numbers=["10"],
+            evidence_numbers=["10"],
+            source_url="https://example.com/very/long/url/to/paper.pdf",
+            page=1,
+        )
+        output = format_evidence_for_prompt([item])
+        parsed = json.loads(output)
+        assert len(parsed) == 1
+        assert parsed[0]["chunk_id"] == "chunk_001"
+        assert parsed[0]["section"] == "Results"
+        assert parsed[0]["text"] == "Sample evidence text."
+        assert "source_url" not in parsed[0]
+        assert "relevance_score" not in parsed[0]
+        assert "claim_numbers" not in parsed[0]
