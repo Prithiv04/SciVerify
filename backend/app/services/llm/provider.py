@@ -320,7 +320,17 @@ class OpenAICompatibleLLMProvider(LLMProvider):
         for attempt in range(self.max_rate_limit_retries + 1):
             response = client.post(request_url, headers=headers, json=payload)
 
-            if response.status_code != 429 or attempt >= self.max_rate_limit_retries:
+            if response.status_code != 429:
+                return response
+
+            # Detect permanent daily quota exhaustion
+            lower_text = response.text.lower()
+            if "tokens per day" in lower_text or "tpd" in lower_text:
+                raise LLMProviderError(
+                    "LLM quota exhausted (daily token limit reached)."
+                )
+
+            if attempt >= self.max_rate_limit_retries:
                 return response
 
             delay = _parse_rate_limit_delay(response)
