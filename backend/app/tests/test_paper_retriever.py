@@ -424,6 +424,51 @@ class TestRetrievePaper:
         called_urls = [call.args[0] for call in mock_retrieve.call_args_list]
         assert "https://pmc.ncbi.nlm.nih.gov/articles/PMC6286148/pdf/" in called_urls
 
+    @patch("app.services.paper_retriever.retrieve_document")
+    @patch("app.services.paper_retriever._fetch_openalex_work")
+    @patch("app.services.paper_retriever.resolve_doi")
+    def test_publisher_anti_bot_403_returns_full_text_unavailable(
+        self,
+        mock_resolve: MagicMock,
+        mock_openalex: MagicMock,
+        mock_retrieve: MagicMock,
+    ) -> None:
+        from app.services.document_retriever import DocumentRetrievalError
+
+        mock_resolve.return_value = CitationMetadata(
+            doi="10.1056/NEJM199103213241202",
+            title="Effect of a Short Course of Prednisone in the Prevention of Early Relapse",
+            authors=["Kenneth R. Chapman"],
+            journal="New England Journal of Medicine",
+            publisher="Massachusetts Medical Society",
+            year=1991,
+            url="https://doi.org/10.1056/nejm199103213241202",
+            source="crossref",
+            type="journal-article",
+        )
+        mock_openalex.return_value = {
+            "id": "https://openalex.org/W1968945837",
+            "open_access": {"is_oa": True, "oa_status": "bronze"},
+            "best_oa_location": {
+                "pdf_url": "https://www.nejm.org/doi/pdf/10.1056/NEJM199103213241202?articleTools=true",
+                "landing_page_url": "https://doi.org/10.1056/nejm199103213241202",
+            },
+            "primary_location": {
+                "landing_page_url": "https://doi.org/10.1056/nejm199103213241202",
+            },
+            "locations": [],
+        }
+        # Simulate publisher blocking automated requests with 403 Forbidden / Cloudflare challenge
+        mock_retrieve.side_effect = DocumentRetrievalError("Document request failed with status 403.")
+
+        result = retrieve_paper("10.1056/NEJM199103213241202", client=MagicMock())
+
+        assert result.status == PaperRetrievalStatus.FULL_TEXT_UNAVAILABLE
+        assert result.paper.full_text_available is False
+        assert len(result.chunks) == 0
+        assert len(result.sections) == 0
+        assert "403" in (result.detail or "")
+
 
 class TestOpenAlexFetch:
     @patch("httpx.Client.get")
