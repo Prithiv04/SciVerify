@@ -89,6 +89,8 @@ class LiveCaseResult:
     failure_reason: str | None
     retrieval_attempts: int
     elapsed_seconds: float
+    candidate_urls: list[str] = field(default_factory=list)
+    retrieval_elapsed_ms: int | None = None
 
 
 @dataclass
@@ -345,6 +347,8 @@ def evaluate_live_case(
         failure_reason=failure_reason,
         retrieval_attempts=retrieval_attempts,
         elapsed_seconds=elapsed_seconds,
+        candidate_urls=[],  # TODO: populate with actual URLs if available
+        retrieval_elapsed_ms=int(elapsed_seconds * 1000),
     )
 
     return live_result, response

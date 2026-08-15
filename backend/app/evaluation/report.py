@@ -447,6 +447,8 @@ def _build_live_diagnostics_payload(live_results: list, live_metrics) -> dict[st
                 "failure_reason": r.failure_reason,
                 "retrieval_attempts": r.retrieval_attempts,
                 "elapsed_seconds": r.elapsed_seconds,
+                "candidate_urls": r.candidate_urls,
+                "retrieval_elapsed_ms": r.retrieval_elapsed_ms,
             }
             for r in live_results
         ],
