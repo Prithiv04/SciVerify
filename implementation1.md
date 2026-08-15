@@ -1,425 +1,100 @@
-# Phase 17.3 — Checkpoint Failure Category Consistency & Resume Validation
+Read the existing SciVerify evaluation architecture and the completed Phase 17 implementation before making any changes.
 
-## Objective
+Implement **Phase 18: Live Evaluation Reliability & Retrieval Diagnostics**.
 
-Fix the Phase 17.2 resume behavior so quota-exhausted research-paper cases stored in the checkpoint are correctly recognized and retried.
+The goal is to make the real research-paper live benchmark more reliable, observable, and resumable without changing the existing verification logic or offline evaluation behavior.
 
-The current Phase 17 checkpoint contains 15 failed cases with:
+### Main objectives
 
-```text
-category: "llm_failure"
-reason: "LLM quota exhausted (daily token limit reached)."
-```
+1. **Structured live failure handling**
 
-However, `run.py` currently retries a failed case only when:
+   * Review the existing `LiveFailureCategory` system.
+   * Ensure retrieval and LLM failures are consistently classified into meaningful categories such as:
 
-```text
-failed_info["category"] == LiveFailureCategory.LLM_QUOTA_EXCEEDED.name
-```
+     * `DOI_NOT_FOUND`
+     * `FULL_TEXT_UNAVAILABLE`
+     * `ANTI_BOT_BLOCKED`
+     * `PAYWALLED`
+     * `RETRIEVAL_ERROR`
+     * `LLM_TIMEOUT`
+     * `LLM_QUOTA_EXCEEDED`
+     * other existing categories already defined by the project.
+   * Avoid misclassifying retrieval failures as verification/LLM failures.
 
-Therefore the existing checkpoint entries do not match the retry condition and are skipped.
+2. **Per-case live result tracking**
 
-Do not change verification agents, retrieval logic, evidence ranking, offline evaluation, or benchmark dataset definitions.
+   * Ensure every live benchmark case produces a structured result containing its status, failure category/reason when applicable, retrieval information, and verification result when successful.
+   * Preserve successful, failed, and skipped cases separately.
 
----
+3. **Retrieval diagnostics**
 
-## 1. Inspect the failure-category flow
+   * Capture useful retrieval information such as number of retrieval attempts, candidate URLs attempted, failure reasons, and elapsed time.
+   * Clearly distinguish invalid PDFs, HTTP failures, paywalls, anti-bot/interstitial pages, and unavailable full text.
+   * Do not bypass publisher access controls.
 
-Review:
+4. **Bounded retries**
 
-```text
-backend/app/evaluation/run.py
-backend/app/evaluation/live_diagnostics.py
-backend/app/services/llm/provider.py
-backend/app/evaluation/checkpoint.py
-```
+   * Ensure transient retrieval failures use bounded retries with configurable retry limits/backoff.
+   * Permanent failures such as DOI-not-found or unavailable full text should not waste repeated retries.
+   * Preserve the existing LLM quota-abort behavior from Phase 17.
 
-Trace the complete flow:
+5. **Live reporting**
 
-```text
-LLM provider exception
-        ↓
-LLMProviderError
-        ↓
-LiveFailureCategory classification
-        ↓
-LiveCaseResult
-        ↓
-checkpoint failed_cases
-        ↓
-resume decision
-```
+   * Improve live JSON and Markdown reports so they contain:
 
-Determine why a quota exhaustion is currently persisted as:
+     * overall live benchmark summary
+     * per-case results
+     * success/failure/skip counts
+     * failure-category counts
+     * retrieval diagnostics
+     * verification metrics for successfully evaluated cases
+     * timing information
+     * resume/checkpoint information where applicable.
+   * Reports must remain useful even when the live run terminates early because of quota exhaustion or another external failure.
 
-```text
-llm_failure
-```
+6. **Checkpoint compatibility**
 
-instead of:
+   * Preserve the existing Phase 17 checkpoint format and resume behavior.
+   * Do not break existing `--resume` or `--resume-live`.
+   * Existing completed cases must remain completed.
+   * Quota failures must remain retryable.
+   * Permanent retrieval failures must remain non-retryable.
 
-```text
-LLM_QUOTA_EXCEEDED
-```
+### Constraints
 
-Do not blindly change the resume comparison without fixing the underlying category representation.
+* Do NOT modify the core verification/prosecutor/defender/adjudicator logic unless absolutely required.
+* Do NOT break offline evaluation.
+* Do NOT modify the baseline silently.
+* Do NOT add LLM calls to offline tests/evaluation.
+* Do NOT expose API keys or modify `.env`.
+* Preserve the existing frontend.
+* Keep the implementation backward compatible with the current 339-test baseline.
+* Prefer small, focused changes over rewriting existing evaluation infrastructure.
 
----
+### Testing
 
-## 2. Establish one canonical checkpoint category
+Add or update deterministic tests for:
 
-Checkpoint failure categories must use the canonical `LiveFailureCategory` names.
+* each important failure classification
+* retrieval retry behavior
+* permanent vs transient failures
+* per-case live result tracking
+* report generation
+* early quota termination
+* checkpoint/resume compatibility
+* legacy checkpoint compatibility if applicable.
 
-For quota exhaustion, persist:
+Run the complete test suite after implementation and confirm there are no regressions.
 
-```text
-LLM_QUOTA_EXCEEDED
-```
+### Final output
 
-not:
+After implementation, report:
 
-```text
-llm_failure
-```
+* files changed
+* what was implemented
+* tests added/updated
+* complete test result
+* any live-evaluation validation performed
+* remaining external limitations/blockers.
 
-The checkpoint should therefore look conceptually like:
-
-```json
-{
-  "failed_cases": {
-    "cas9_supports_001": {
-      "category": "LLM_QUOTA_EXCEEDED",
-      "reason": "LLM quota exhausted (daily token limit reached)."
-    }
-  }
-}
-```
-
-Use the existing enum rather than introducing a second category system.
-
----
-
-## 3. Make resume logic robust
-
-Update resume handling so that:
-
-### Completed cases
-
-If a case exists in:
-
-```text
-completed_case_ids
-```
-
-skip it permanently.
-
-### Quota failures
-
-If a case exists in `failed_cases` and its category is:
-
-```text
-LLM_QUOTA_EXCEEDED
-```
-
-retry it.
-
-### Non-quota failures
-
-If a case failed for another category, do not automatically retry it.
-
-### Legacy checkpoint compatibility
-
-The existing Phase 17 checkpoint already contains:
-
-```text
-category: "llm_failure"
-```
-
-with a reason explicitly stating:
-
-```text
-LLM quota exhausted (daily token limit reached).
-```
-
-The implementation must handle this existing checkpoint safely.
-
-Preferred approach:
-
-* Detect legacy quota-failure records using both category and reason.
-* Treat the record as quota-exhausted when the reason clearly identifies daily LLM quota exhaustion.
-* Do not classify arbitrary `llm_failure` records as quota failures.
-
-This allows the current Phase 17 checkpoint to resume without manually editing the JSON.
-
----
-
-## 4. Persist the canonical category on retry failure
-
-When a retried case fails again because of quota exhaustion:
-
-```text
-failed_cases[case_id]["category"]
-```
-
-must be saved as:
-
-```text
-LLM_QUOTA_EXCEEDED
-```
-
-The reason should remain human-readable.
-
-When a quota-failed case succeeds:
-
-1. Add its ID to `completed_case_ids`.
-2. Remove its entry from `failed_cases`.
-3. Persist the checkpoint immediately.
-
----
-
-## 5. Verify checkpoint state before processing
-
-On resume, print useful diagnostics such as:
-
-```text
-Resuming from checkpoint with 0 completed cases.
-Retryable quota-failed cases: 15
-Non-retryable failed cases: 0
-```
-
-Do not expose API keys, provider credentials, or sensitive information.
-
-The count must be calculated from the actual checkpoint and live-eligible dataset.
-
----
-
-## 6. Fix resume accounting
-
-The current run can finish with:
-
-```text
-Successfully evaluated: 0
-Retrieval/infrastructure failures: 0
-Verification failures: 0
-Skipped: 0
-```
-
-even though the checkpoint contains 15 failed cases.
-
-Fix the accounting so cases skipped because they are completed or permanently failed are handled consistently.
-
-For quota-failed cases selected for retry:
-
-```text
-retry → evaluate → update result/checkpoint
-```
-
-They must not disappear silently from the run.
-
----
-
-## 7. Preserve quota-abort behavior
-
-Do not reintroduce long provider retry sleeps.
-
-Permanent daily quota exhaustion must continue to:
-
-```text
-LLM_QUOTA_EXCEEDED
-```
-
-and abort immediately.
-
-Do not call `time.sleep()` for the provider's permanent daily-token quota retry.
-
-The existing provider behavior from Phase 17.1 must remain intact.
-
----
-
-## 8. Add focused tests
-
-Add or extend tests covering:
-
-### Test 1 — Canonical quota checkpoint
-
-Given an `LLM_QUOTA_EXCEEDED` failure:
-
-```text
-checkpoint["failed_cases"][case_id]["category"]
-```
-
-must equal:
-
-```text
-LLM_QUOTA_EXCEEDED
-```
-
-### Test 2 — Legacy checkpoint compatibility
-
-Given:
-
-```json
-{
-  "category": "llm_failure",
-  "reason": "LLM quota exhausted (daily token limit reached)."
-}
-```
-
-the resume logic must identify the case as retryable.
-
-### Test 3 — Non-quota LLM failure
-
-Given:
-
-```json
-{
-  "category": "llm_failure",
-  "reason": "Some unrelated provider failure"
-}
-```
-
-the case must not automatically retry.
-
-### Test 4 — Successful quota retry
-
-When a previously quota-failed case succeeds:
-
-```text
-completed_case_ids += case_id
-failed_cases -= case_id
-```
-
-and the checkpoint is persisted.
-
-### Test 5 — Repeated quota failure
-
-When retrying a quota-failed case results in another daily quota exhaustion:
-
-```text
-failed_cases[case_id]["category"] == "LLM_QUOTA_EXCEEDED"
-```
-
-and the run exits cleanly.
-
-### Test 6 — Existing checkpoint
-
-Load the actual checkpoint structure used by Phase 17 and verify that the 15 legacy quota-failed cases are detected as retryable.
-
-Do not make real LLM calls in unit tests.
-
----
-
-## 9. Run regression tests
-
-Run:
-
-```powershell
-cd C:\Users\shaki\OneDrive\Desktop\SciVerify\backend
-python -m pytest -q
-```
-
-Expected result:
-
-```text
-332+ passed
-```
-
-No existing tests should regress.
-
----
-
-## 10. Validate the resume flow
-
-Do NOT delete the existing Phase 17 checkpoint.
-
-Run:
-
-```powershell
-python -m app.evaluation.run --live --skip-unhealthy --checkpoint-dir .\evaluation\checkpoints\phase17 --resume-live
-```
-
-Because the checkpoint contains 15 quota-failed cases, the evaluator should now identify them as retryable.
-
-If the Groq quota is still exhausted, expected behavior is:
-
-```text
-Retryable quota-failed cases: 15
-...
-LLM quota exhausted
-...
-Live Evaluation Interrupted
-```
-
-and the checkpoint should remain intact.
-
-It must NOT:
-
-* silently process zero cases
-* wait for 168 seconds
-* wait for 3526 seconds
-* crash with `AttributeError`
-* delete the checkpoint
-* mark quota failures as successful
-
----
-
-## 11. Verify checkpoint after the run
-
-Run:
-
-```powershell
-Get-Content .\evaluation\checkpoints\phase17\live_checkpoint.json
-```
-
-Verify:
-
-* `completed_case_ids` remains correct.
-* Quota failures remain recorded if quota is still exhausted.
-* Their category is canonical `LLM_QUOTA_EXCEEDED`.
-* The timestamp is timezone-aware.
-* No checkpoint corruption occurred.
-
----
-
-## 12. Final validation
-
-Run:
-
-```powershell
-git status
-git diff --check
-git diff --stat
-```
-
-Do not modify:
-
-```text
-implementation1.md
-```
-
-unless explicitly required by the project workflow.
-
-Do not modify `.env` or API keys.
-
-Do not change the benchmark dataset.
-
-Do not change verification-agent behavior.
-
----
-
-## Definition of Done
-
-Phase 17.3 is complete only when:
-
-* [ ] Existing Phase 17 checkpoint is recognized.
-* [ ] Its 15 legacy quota failures are detected as retryable.
-* [ ] New quota failures are persisted as `LLM_QUOTA_EXCEEDED`.
-* [ ] Non-quota failures are not automatically retried.
-* [ ] Successful retries move cases to `completed_case_ids`.
-* [ ] Permanent quota exhaustion aborts immediately without provider retry sleep.
-* [ ] No `AttributeError` occurs during quota abort.
-* [ ] Checkpoint remains valid after interruption.
-* [ ] Focused resume tests pass.
-* [ ] Full test suite passes.
-* [ ] No real API calls are made by unit tests.
-* [ ] No unrelated project modules are changed.
+Do not start Phase 19. Stop after Phase 18 is implemented and validated.

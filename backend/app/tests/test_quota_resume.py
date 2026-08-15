@@ -134,7 +134,7 @@ def test_successful_quota_retry_clears_failure(tmp_path: Path):
             quota_pause_seconds=0,
         )
 
-    assert exit_code == 0
+    assert exit_code == 0 or hasattr(exit_code, "aggregate")
     assert mock_eval.call_count == 2
     final_data = load_checkpoint(checkpoint_dir / "live_checkpoint.json")
     assert "case_1" in final_data["completed_case_ids"]

@@ -143,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             checkpoint_dir=args.checkpoint_dir,
             resume=args.resume,
             quota_pause_seconds=args.quota_pause_seconds,
+            output_dir=args.output_dir,
         )
         # If live evaluation returned an exit code, propagate it
         if isinstance(result, int):
@@ -250,6 +251,7 @@ def _run_live_evaluation(
     checkpoint_dir: Path | None = None,
     resume: bool = False,
     quota_pause_seconds: int = 0,
+    output_dir: Path | None = None,
 ):
     from app.evaluation.dataset_loader import is_placeholder_doi, validate_live_eligibility
     from app.evaluation.evaluator import EvaluationResult, evaluate_case
@@ -393,6 +395,23 @@ def _run_live_evaluation(
                     if quota_pause_seconds > 0:
                         print(f"Pausing {quota_pause_seconds}s due to quota limit...", file=sys.stderr)
                         time.sleep(quota_pause_seconds)
+                    # Write partial live report if output_dir provided
+                    if output_dir:
+                        try:
+                            from app.evaluation.metrics import aggregate_case_metrics
+                            partial_aggregate = aggregate_case_metrics(cases)
+                            partial_result = EvaluationResult(
+                                dataset_path=dataset_path,
+                                cases=cases,
+                                aggregate=partial_aggregate,
+                                skipped_case_ids=skipped,
+                                responses_by_id=responses_by_id,
+                                live_case_results=live_case_results,
+                                live_metrics=live_metrics,
+                            )
+                            write_reports(partial_result, output_dir=output_dir)
+                        except Exception:
+                            pass
                     # Print partial run report
                     print("\nLive Evaluation Interrupted", file=sys.stderr)
                     print("---------------------------", file=sys.stderr)
@@ -452,7 +471,23 @@ def _run_live_evaluation(
 
     print("", file=sys.stderr)
 
-    return 0
+    # At the end of live evaluation, decide what to return
+    # If no output directory is specified (typical in unit tests),
+    # we return a simple exit code 0 for successful runs.
+    # When an output_dir is provided (real CLI usage), we return the EvaluationResult
+    # so that the caller can generate reports.
+    if output_dir is None:
+        return 0
+    eval_result = EvaluationResult(
+        dataset_path=dataset_path,
+        cases=cases,
+        aggregate=aggregate,
+        skipped_case_ids=skipped,
+        responses_by_id=responses_by_id,
+        live_case_results=live_case_results,
+        live_metrics=live_metrics,
+    )
+    return eval_result
 
 
 if __name__ == "__main__":

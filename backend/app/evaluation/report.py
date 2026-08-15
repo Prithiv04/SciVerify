@@ -294,6 +294,26 @@ def render_markdown_report(
             lines.append(f"- Total elapsed time: {total_elapsed_time:.1f}s")
             lines.append("")
 
+        lines.append("Live Case Results:")
+        for r in result.live_case_results:
+            if r.status == "evaluated":
+                verdict_str = r.actual_verdict.value if r.actual_verdict else "n/a"
+                lines.append(
+                    f"- {r.case_id}: evaluated | verdict={verdict_str} "
+                    f"| confidence={_fmt(r.confidence)} | attempts={r.retrieval_attempts} | time={r.elapsed_seconds:.1f}s"
+                )
+            elif r.status == "skipped":
+                cat = r.failure_category.value if r.failure_category else "unknown"
+                lines.append(
+                    f"- {r.case_id}: skipped ({cat}) | reason={r.failure_reason or 'n/a'} | attempts={r.retrieval_attempts}"
+                )
+            else:
+                cat = r.failure_category.value if r.failure_category else "unknown"
+                lines.append(
+                    f"- {r.case_id}: failed ({cat}) | reason={r.failure_reason or 'n/a'} | attempts={r.retrieval_attempts}"
+                )
+        lines.append("")
+
     lines.append("Confusion matrix:")
     for expected, actuals in aggregate.confusion_matrix.items():
         for actual, count in actuals.items():
