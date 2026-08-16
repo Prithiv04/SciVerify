@@ -129,7 +129,7 @@ class TestDiscoverFullText:
         urls = [candidate.url for candidate in candidates]
 
         assert "https://pmc.ncbi.nlm.nih.gov/articles/PMC6286148/pdf/" in urls
-        assert "https://www.ncbi.nlm.nih.gov/pmc/articles/6286148" in urls
+        assert "https://pmc.ncbi.nlm.nih.gov/articles/PMC6286148/" in urls
         assert "https://europepmc.org/articles/PMC6286148" in urls
         assert candidates[0].format == "pdf"
 

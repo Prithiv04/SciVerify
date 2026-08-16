@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
+from app.services.citation_resolver import USER_AGENT
 from app.services.document_retriever import (
+    DOCUMENT_ACCEPT_HEADER,
     DocumentRetrievalError,
     DocumentTooLargeError,
     InterstitialPageError,
@@ -42,6 +44,7 @@ class TestDocumentRetriever:
         assert "Example" in (document.text or "")
         client.get.assert_called_once_with(
             "https://example.org/paper.html",
+            headers={"Accept": DOCUMENT_ACCEPT_HEADER, "User-Agent": USER_AGENT},
             follow_redirects=True,
         )
 

@@ -23,9 +23,17 @@ HTML_CONTENT_TYPES = {
     "application/xhtml+xml",
 }
 
+DOCUMENT_ACCEPT_HEADER = (
+    "text/html,application/xhtml+xml,application/pdf,application/xml;q=0.9,*/*;q=0.8"
+)
+
 _INTERSTITIAL_PATTERNS = (
     re.compile(r"checking your browser", re.IGNORECASE),
-    re.compile(r"recaptcha", re.IGNORECASE),
+    re.compile(r"recaptcha/challengepage", re.IGNORECASE),
+    re.compile(r"g-recaptcha-response", re.IGNORECASE),
+    re.compile(r"class=[\"']g-recaptcha[\"']", re.IGNORECASE),
+    re.compile(r"recaptcha-checkbox", re.IGNORECASE),
+    re.compile(r"recaptcha challenge", re.IGNORECASE),
     re.compile(r"checking your browser before accessing", re.IGNORECASE),
     re.compile(r"cf-browser-verification", re.IGNORECASE),
     re.compile(r"just a moment\.\.\.", re.IGNORECASE),
@@ -103,7 +111,7 @@ def retrieve_document(
     owns_client = client is None
     http_client = client or httpx.Client(
         timeout=PAPER_REQUEST_TIMEOUT,
-        headers={"User-Agent": USER_AGENT},
+        headers={"User-Agent": USER_AGENT, "Accept": DOCUMENT_ACCEPT_HEADER},
         follow_redirects=True,
     )
 
@@ -111,7 +119,11 @@ def retrieve_document(
         logger.info("Document retrieval started: candidate_url=%s", url)
 
         try:
-            response = http_client.get(url, follow_redirects=True)
+            response = http_client.get(
+                url,
+                headers={"Accept": DOCUMENT_ACCEPT_HEADER, "User-Agent": USER_AGENT},
+                follow_redirects=True,
+            )
         except httpx.TimeoutException as exc:
             raise DocumentRetrievalError("Document request timed out.") from exc
         except httpx.RequestError as exc:

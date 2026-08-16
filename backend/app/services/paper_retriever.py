@@ -81,7 +81,8 @@ def retrieve_paper(
     owns_client = client is None
     http_client = client or httpx.Client(
         timeout=30.0,
-        headers={"Accept": "application/json", "User-Agent": USER_AGENT},
+        headers={"User-Agent": USER_AGENT},
+        follow_redirects=True,
     )
 
     try:
@@ -415,6 +416,15 @@ def _pmc_pdf_url_from_html(url: str) -> str | None:
     return f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/"
 
 
+def _pmc_html_url_from_pmc_url(url: str) -> str | None:
+    match = _PMC_ARTICLE_PATTERN.search(url)
+    if match is None:
+        return None
+    pmc_id = match.group(1)
+    normalized_id = pmc_id if pmc_id.upper().startswith("PMC") else f"PMC{pmc_id}"
+    return f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/"
+
+
 def _europe_pmc_url_from_pmc_html(url: str) -> str | None:
     match = _PMC_ARTICLE_PATTERN.search(url)
     if match is None:
@@ -427,27 +437,49 @@ def _europe_pmc_url_from_pmc_html(url: str) -> str | None:
 def _expand_candidate_mirrors(
     candidates: list[FullTextCandidate],
 ) -> list[FullTextCandidate]:
-    expanded = list(candidates)
+    expanded: list[FullTextCandidate] = []
     for candidate in candidates:
         if "pmc" not in candidate.url.lower():
+            expanded.append(candidate)
             continue
 
-        pdf_url = _pmc_pdf_url_from_html(candidate.url)
-        if pdf_url is not None and not any(c.url == pdf_url for c in expanded):
-            expanded.insert(
-                0,
-                FullTextCandidate(url=pdf_url, format="pdf", provider="pmc"),
-            )
+        match = _PMC_ARTICLE_PATTERN.search(candidate.url)
+        if match is not None:
+            pmc_id = match.group(1)
+            normalized_id = pmc_id if pmc_id.upper().startswith("PMC") else f"PMC{pmc_id}"
+            pdf_url = f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/"
+            html_url = f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/"
+            epmc_url = f"https://europepmc.org/articles/{normalized_id}"
 
-        europe_pmc_url = _europe_pmc_url_from_pmc_html(candidate.url)
-        if europe_pmc_url is not None and not any(c.url == europe_pmc_url for c in expanded):
-            expanded.append(
-                FullTextCandidate(
-                    url=europe_pmc_url,
-                    format="html",
-                    provider="europepmc",
+            if not any(c.url == pdf_url for c in expanded):
+                expanded.append(
+                    FullTextCandidate(
+                        url=pdf_url,
+                        format="pdf",
+                        provider="pmc",
+                        source_type="repository",
+                    )
                 )
-            )
+            if not any(c.url == html_url for c in expanded):
+                expanded.append(
+                    FullTextCandidate(
+                        url=html_url,
+                        format="html",
+                        provider="pmc",
+                        source_type="repository",
+                    )
+                )
+            if not any(c.url == epmc_url for c in expanded):
+                expanded.append(
+                    FullTextCandidate(
+                        url=epmc_url,
+                        format="html",
+                        provider="europepmc",
+                        source_type="repository",
+                    )
+                )
+        else:
+            expanded.append(candidate)
     return expanded
 
 
@@ -457,9 +489,9 @@ def _discover_europe_pmc_candidates(
 ) -> list[FullTextCandidate]:
     """Query Europe PMC REST API by DOI to discover PMC/Europe PMC full-text mirrors.
 
-    Returns PMC PDF (Tier 0) and Europe PMC HTML (Tier 1) candidates when the
-    paper has a PMCID record, which indicates it is freely available via NIH
-    Open Access policy. Never bypasses paywalls or anti-bot protections.
+    Returns PMC PDF (Tier 0), PMC HTML (Tier 1), and Europe PMC HTML (Tier 1)
+    candidates when the paper has a PMCID record, which indicates it is freely
+    available via NIH Open Access policy. Never bypasses paywalls or anti-bot protections.
     """
     url = (
         f"https://www.ebi.ac.uk/europepmc/webservices/rest/search"
@@ -484,6 +516,12 @@ def _discover_europe_pmc_candidates(
             FullTextCandidate(
                 url=f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/pdf/",
                 format="pdf",
+                provider="pmc",
+                source_type="repository",
+            ),
+            FullTextCandidate(
+                url=f"https://pmc.ncbi.nlm.nih.gov/articles/{normalized_id}/",
+                format="html",
                 provider="pmc",
                 source_type="repository",
             ),

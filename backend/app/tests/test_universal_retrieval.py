@@ -88,17 +88,22 @@ class TestEuropePmcDiscovery:
         client = _mock_client([_mock_response(200, epmc_body)])
         candidates = _discover_europe_pmc_candidates("10.1126/science.1225829", client)
 
-        assert len(candidates) == 2
+        assert len(candidates) == 3
         pdf_c = next(c for c in candidates if c.format == "pdf")
-        html_c = next(c for c in candidates if c.format == "html")
+        html_pmc = next(c for c in candidates if c.format == "html" and c.provider == "pmc")
+        html_epmc = next(c for c in candidates if c.format == "html" and c.provider == "europepmc")
 
         assert "pmc.ncbi.nlm.nih.gov/articles/PMC6286148/pdf/" in pdf_c.url
         assert pdf_c.provider == "pmc"
         assert pdf_c.source_type == "repository"
 
-        assert "europepmc.org/articles/PMC6286148" in html_c.url
-        assert html_c.provider == "europepmc"
-        assert html_c.source_type == "repository"
+        assert "pmc.ncbi.nlm.nih.gov/articles/PMC6286148/" in html_pmc.url
+        assert html_pmc.provider == "pmc"
+        assert html_pmc.source_type == "repository"
+
+        assert "europepmc.org/articles/PMC6286148" in html_epmc.url
+        assert html_epmc.provider == "europepmc"
+        assert html_epmc.source_type == "repository"
 
     def test_prepends_pmc_prefix_when_pmcid_is_numeric(self) -> None:
         epmc_body = {
