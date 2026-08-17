@@ -93,6 +93,19 @@ class AdjudicatorAnalysis(BaseModel):
     contradicting_evidence: list[str] = Field(default_factory=list)
     suggested_correction: str | None = None
 
+    @field_validator("verdict", mode="before")
+    @classmethod
+    def normalize_verdict(cls, value: object) -> object:
+        """Normalize LLM-returned verdict strings to uppercase before enum parsing.
+
+        Some LLMs return lowercase (e.g. "supports") or mixed-case (e.g.
+        "Supports") values.  Uppercasing before Pydantic resolves the enum
+        prevents a validation error that would otherwise crash the pipeline.
+        """
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
+
     @field_validator("confidence")
     @classmethod
     def clamp_confidence(cls, value: float) -> float:

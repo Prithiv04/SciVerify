@@ -51,6 +51,10 @@ function rebuildMinimalResult(row: VerificationHistoryRow): VerificationResult {
     reasoning: row.summary ?? 'Verification reasoning unavailable.',
     paperTitle: row.paper_title ?? undefined,
     paperDoi: row.doi,
+    // Explicitly null so VerdictHeader renders "Agreement information unavailable"
+    // rather than breaking on an undefined value.
+    agentAgreement: null,
+    validationWarnings: [],
     evidenceFactors: [],
     prosecutor: {
       role: 'Prosecutor',

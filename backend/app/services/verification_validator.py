@@ -182,10 +182,23 @@ def _stance_indicates_support(stance: str) -> bool:
     return any(keyword in normalized for keyword in SUPPORT_STANCE_KEYWORDS)
 
 
+_DISAGREEMENT_CONFIDENCE_THRESHOLD = 0.5
+
+
 def _agents_agree(
     prosecutor: ProsecutorAnalysis,
     defender: DefenderAnalysis,
 ) -> bool:
+    """Return True when agents do not strongly oppose each other.
+
+    The prosecutor is designed to challenge and the defender to support, so
+    having contradicting/supporting evidence respectively is their normal
+    adversarial role.  We only declare *disagreement* when **both** agents are
+    simultaneously highly confident (≥ 0.5) in opposing conclusions — i.e.
+    the prosecutor strongly challenges while the defender strongly supports, or
+    vice versa.  Low-confidence opposition is expected and does not constitute
+    true disagreement.
+    """
     prosecutor_challenging = bool(prosecutor.contradicting_evidence) or _stance_indicates_challenge(
         prosecutor.stance
     )
@@ -199,9 +212,20 @@ def _agents_agree(
         prosecutor.stance
     )
 
-    if prosecutor_challenging and defender_supporting:
+    # Disagree only when both are *strongly* committed to opposite conclusions.
+    if (
+        prosecutor_challenging
+        and defender_supporting
+        and prosecutor.confidence >= _DISAGREEMENT_CONFIDENCE_THRESHOLD
+        and defender.confidence >= _DISAGREEMENT_CONFIDENCE_THRESHOLD
+    ):
         return False
-    if defender_challenging and prosecutor_supporting:
+    if (
+        defender_challenging
+        and prosecutor_supporting
+        and defender.confidence >= _DISAGREEMENT_CONFIDENCE_THRESHOLD
+        and prosecutor.confidence >= _DISAGREEMENT_CONFIDENCE_THRESHOLD
+    ):
         return False
     return True
 

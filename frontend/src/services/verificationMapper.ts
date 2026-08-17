@@ -125,19 +125,30 @@ function mapAdjudicator(
 
 function mapAdjudicatorDetail(
   agent: BackendAdjudicatorAnalysis | null | undefined,
+  /**
+   * The validator-calibrated confidence from the top-level response.
+   * We use this instead of `agent.confidence` (the raw LLM value) so that the
+   * adjudicator panel always shows the same confidence as the VerdictHeader,
+   * eliminating the mismatch between raw and calibrated values.
+   */
+  calibratedConfidence: number,
 ): AdjudicatorDetail | undefined {
   if (!agent) return undefined
 
   return {
     analysis: agent.analysis,
     stance: undefined,
-    confidence: toConfidencePercent(agent.confidence),
+    confidence: calibratedConfidence,
     keyPoints: [],
     supportingEvidence: agent.supporting_evidence ?? [],
     contradictingEvidence: agent.contradicting_evidence ?? [],
     verdict: agent.verdict,
     reasoning: agent.reasoning,
-    suggestedCorrection: agent.suggested_correction ?? null,
+    // suggestedCorrection intentionally omitted here: the backend validator is
+    // the canonical source for suggested_correction (it strips it for
+    // SUPPORTS/INSUFFICIENT and validates it for OVERSTATED/CONTRADICTS).
+    // We read the top-level response.suggested_correction in mapSuggestedCorrection.
+    suggestedCorrection: null,
   }
 }
 
@@ -191,10 +202,13 @@ function mapSuggestedCorrection(
   response: BackendVerificationResponse,
   claim: string,
 ): SuggestedCorrection | null {
-  const suggested =
-    response.suggested_correction ??
-    response.adjudicator?.suggested_correction ??
-    null
+  // Use ONLY the top-level response.suggested_correction.
+  // The backend validator (verification_validator.py) is the canonical source:
+  // it strips suggested_correction for SUPPORTS/INSUFFICIENT verdicts and
+  // validates it for OVERSTATED/CONTRADICTS/FABRICATED.  Falling back to
+  // response.adjudicator?.suggested_correction would bypass that logic and
+  // could display a correction the backend decided to remove.
+  const suggested = response.suggested_correction ?? null
 
   if (!suggested?.trim()) {
     return null
@@ -252,7 +266,7 @@ export function mapBackendVerificationToResult(
     adjudicator: mapAdjudicator(response.adjudicator),
     prosecutorDetail: mapAgentDetail(response.prosecutor),
     defenderDetail: mapAgentDetail(response.defender),
-    adjudicatorDetail: mapAdjudicatorDetail(response.adjudicator),
+    adjudicatorDetail: mapAdjudicatorDetail(response.adjudicator, confidence),
     evidence: (response.evidence ?? []).map((item) =>
       mapEvidenceItem(item, response.paper, verdict),
     ),
