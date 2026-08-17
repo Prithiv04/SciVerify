@@ -8,9 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # Ensure backend/.env is loaded even if CWD is repo root
 backend_env = Path(__file__).resolve().parent.parent / ".env"
 if backend_env.exists():
-    load_dotenv(dotenv_path=backend_env)
+    load_dotenv(dotenv_path=backend_env, override=True)
 else:
-    load_dotenv()
+    load_dotenv(override=True)
 
 from app.api.routes.citations import router as citations_router
 from app.api.routes.evidence import router as evidence_router

@@ -9,14 +9,14 @@ try:
     # 1. Try explicit backend directory .env (parent of app package)
     backend_env = Path(__file__).resolve().parent.parent / ".env"
     if backend_env.exists():
-        load_dotenv(dotenv_path=backend_env)
+        load_dotenv(dotenv_path=backend_env, override=True)
     else:
         # 2. Try find_dotenv or default search
         found_env = find_dotenv(usecwd=True)
         if found_env:
-            load_dotenv(dotenv_path=found_env)
+            load_dotenv(dotenv_path=found_env, override=True)
         else:
-            load_dotenv()
+            load_dotenv(override=True)
 except ImportError:
     pass
 
