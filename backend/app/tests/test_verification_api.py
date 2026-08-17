@@ -13,6 +13,7 @@ from app.schemas.verification import (
 )
 from app.services.paper_retriever import (
     DocumentRetrievalFailure,
+    FullTextUnavailableError,
     PaperNotFoundError,
     PaperProviderError,
 )
@@ -168,3 +169,14 @@ class TestVerificationApi:
 
         assert response.status_code == 200
         VerificationResponse.model_validate(response.json())
+
+    @patch("app.api.routes.verification.analyze_verification")
+    def test_full_text_unavailable_failure(self, mock_analyze: MagicMock) -> None:
+        mock_analyze.side_effect = FullTextUnavailableError("Full text could not be found.")
+
+        response = self.client.post(
+            "/api/verification/analyze",
+            json={"claim": "accuracy improved", "doi": "10.1000/test"},
+        )
+        assert response.status_code == 503
+        assert "Full text could not be found." in response.json()["detail"]

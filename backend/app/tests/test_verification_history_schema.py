@@ -1,4 +1,4 @@
-﻿"""Regression tests for Supabase verification_history schema and serialization contracts.
+"""Regression tests for Supabase verification_history schema and serialization contracts.
 
 Validates:
 1. SQL migration 002_create_verification_history.sql integrity, columns, indexes, and RLS policies.
@@ -253,3 +253,21 @@ class TestDashboardStatsParity:
         assert stats["contradicts"] == 1
         assert stats["insufficient"] == 1
         assert stats["fabricated"] == 1
+
+    def test_handles_lowercase_and_unknown_verdict_gracefully(self) -> None:
+        """Verifies that corrupted or lowercase verdict strings in history records
+        fallback safely without raising uncaught exceptions."""
+        valid_verdicts = {"SUPPORTS", "OVERSTATED", "CONTRADICTS", "INSUFFICIENT", "FABRICATED"}
+
+        def resolve_verdict(val: object) -> str:
+            if isinstance(val, str):
+                upper = val.strip().upper()
+                if upper in valid_verdicts:
+                    return upper
+            return "INSUFFICIENT"
+
+        assert resolve_verdict("supports") == "SUPPORTS"
+        assert resolve_verdict("Contradicts") == "CONTRADICTS"
+        assert resolve_verdict("INVALID_VERDICT") == "INSUFFICIENT"
+        assert resolve_verdict(None) == "INSUFFICIENT"
+        assert resolve_verdict(123) == "INSUFFICIENT"

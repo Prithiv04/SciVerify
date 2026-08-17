@@ -19,6 +19,8 @@ from app.utils.claim_preprocessor import (
 )
 from app.utils.claim_segmenter import segment_claim
 
+import re
+
 logger = logging.getLogger(__name__)
 
 SUPPORTED_THRESHOLD = 0.65
@@ -46,12 +48,11 @@ def build_claim_traceability(
     for index, segment_text in enumerate(segment_texts, start=1):
         segment = _safe_preprocess_segment(segment_text)
         scored_evidence = _score_segment_evidence(segment, evidence)
-        coverage_score = scored_evidence[0][1] if scored_evidence else 0.0
-        linked_ids = [
-            chunk_id
-            for chunk_id, score in scored_evidence
-            if score >= EVIDENCE_LINK_THRESHOLD
-        ]
+        coverage_score, linked_ids = _compute_segment_coverage(
+            segment,
+            scored_evidence,
+            evidence,
+        )
         status = _determine_segment_status(
             coverage_score=coverage_score,
             linked_ids=linked_ids,
@@ -103,7 +104,7 @@ def _safe_preprocess_segment(segment_text: str) -> ProcessedClaim:
 def _extract_segment_tokens(normalized_text: str) -> list[str]:
     tokens: list[str] = []
     for raw_token in normalized_text.split():
-        token = raw_token.strip(".")
+        token = raw_token.strip(".,;:()")
         if len(token) < 2 or token in STOPWORDS or token.isdigit():
             continue
         tokens.append(token)
@@ -142,20 +143,106 @@ def _segment_match_score(segment: ProcessedClaim, evidence: EvidenceItem) -> flo
     return _clamp(segment_specific + metadata)
 
 
+def _compute_segment_coverage(
+    segment: ProcessedClaim,
+    scored_evidence: list[tuple[str, float]],
+    evidence: list[EvidenceItem],
+) -> tuple[float, list[str]]:
+    """Compute segment coverage score and linked chunk IDs.
+
+    Evaluates both the top matching chunk and multi-chunk aggregate coverage
+    across all linked chunks so that evidence spanning multiple sections
+    of a paper is not artificially penalized by single-chunk boundaries.
+    """
+    if not scored_evidence:
+        return 0.0, []
+
+    linked_ids = [
+        chunk_id
+        for chunk_id, score in scored_evidence
+        if score >= EVIDENCE_LINK_THRESHOLD
+    ]
+    top_score = scored_evidence[0][1]
+
+    if not linked_ids:
+        return _clamp(top_score), []
+
+    if len(linked_ids) == 1:
+        return _clamp(top_score), linked_ids
+
+    linked_items = [ev for ev in evidence if ev.chunk_id in linked_ids]
+    segment_tokens = set(segment.tokens)
+
+    all_chunk_tokens: set[str] = set()
+    for ev in linked_items:
+        all_chunk_tokens.update(
+            _extract_segment_tokens(_normalize_claim_text(ev.text))
+        )
+
+    union_token_overlap = (
+        len(segment_tokens.intersection(all_chunk_tokens)) / len(segment_tokens)
+        if segment_tokens
+        else 0.0
+    )
+
+    numeric_matched = False
+    if segment.claim_numbers:
+        for ev in linked_items:
+            if _segment_numeric_overlap(segment.claim_numbers, ev) >= 0.8:
+                numeric_matched = True
+                break
+
+    multi_chunk_score = 0.50 * top_score + 0.35 * union_token_overlap
+    if numeric_matched:
+        multi_chunk_score += 0.10
+    if len(linked_ids) >= 3:
+        multi_chunk_score += 0.05
+
+    final_score = _clamp(max(top_score, multi_chunk_score))
+    return final_score, linked_ids
+
+
+def _stem_token(token: str) -> str:
+    """Strip common English inflection suffixes for robust morphological matching."""
+    t = token.lower().strip(".,;:()")
+    if len(t) <= 3:
+        return t
+    for suffix in ("tion", "sion", "ment", "ing", "ies", "ied", "ed", "es", "s", "ive", "able"):
+        if t.endswith(suffix) and len(t) - len(suffix) >= 3:
+            return t[: -len(suffix)]
+    return t
+
+
 def _token_overlap(segment_tokens: set[str], chunk_tokens: set[str]) -> float:
     if not segment_tokens:
         return 0.0
-    overlap = segment_tokens.intersection(chunk_tokens)
-    return len(overlap) / len(segment_tokens)
+
+    chunk_stems = {_stem_token(t) for t in chunk_tokens}
+    overlap_count = 0
+    for token in segment_tokens:
+        if token in chunk_tokens or _stem_token(token) in chunk_stems:
+            overlap_count += 1
+
+    return overlap_count / len(segment_tokens)
 
 
 def _phrase_overlap(segment_normalized: str, chunk_normalized: str) -> float:
+    """Calculate phrase overlap between segment and evidence chunk.
+
+    Combines contiguous n-gram matching with content-word skip bigrams to
+    gracefully handle parenthetical qualifiers (e.g. 95% CI), minor preposition
+    variations, morphological inflections, and hedges without losing semantic specificity.
+    """
     words = segment_normalized.split()
     if len(words) < 2:
-        return 1.0 if segment_normalized and segment_normalized in chunk_normalized else 0.0
+        return (
+            1.0
+            if segment_normalized and segment_normalized in chunk_normalized
+            else 0.0
+        )
 
-    matches = 0
-    total = 0
+    raw_matches = 0
+    raw_total = 0
     for size in (3, 2):
         if len(words) < size:
             continue
@@ -163,13 +250,31 @@ def _phrase_overlap(segment_normalized: str, chunk_normalized: str) -> float:
             phrase = " ".join(words[index : index + size])
             if all(word in STOPWORDS for word in phrase.split()):
                 continue
-            total += 1
+            raw_total += 1
             if phrase in chunk_normalized:
-                matches += 1
+                raw_matches += 1
 
-    if total == 0:
-        return 0.0
-    return matches / total
+    raw_score = (raw_matches / raw_total) if raw_total > 0 else 0.0
+
+    content_words = _extract_segment_tokens(segment_normalized)
+    cw_matches = 0
+    cw_total = 0
+    if len(content_words) >= 2:
+        for index in range(len(content_words) - 1):
+            cw_total += 1
+            w1, w2 = content_words[index], content_words[index + 1]
+            stem1 = _stem_token(w1)
+            stem2 = _stem_token(w2)
+            pattern = re.compile(
+                rf"\b(?:{re.escape(w1)}|{re.escape(stem1)}\w*)\b(?:\s+\S+){{0,5}}\s+\b(?:{re.escape(w2)}|{re.escape(stem2)}\w*)\b",
+                re.IGNORECASE,
+            )
+            if pattern.search(chunk_normalized):
+                cw_matches += 1
+
+    cw_score = (cw_matches / cw_total) if cw_total > 0 else 0.0
+
+    return max(raw_score, cw_score, 0.5 * raw_score + 0.5 * cw_score)
 
 
 def _segment_numeric_overlap(

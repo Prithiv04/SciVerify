@@ -13,6 +13,7 @@ from app.schemas.paper import (
 )
 from app.services.paper_retriever import (
     DocumentRetrievalFailure,
+    FullTextUnavailableError,
     PaperNotFoundError,
     PaperProviderError,
 )
@@ -165,3 +166,14 @@ class TestPapersApi:
         assert body["sections"] == []
         assert body["chunks"] == []
         assert body["detail"] == "PDF document contains no extractable text."
+
+    @patch("app.api.routes.papers.retrieve_paper")
+    def test_full_text_unavailable_error(self, mock_retrieve: MagicMock) -> None:
+        mock_retrieve.side_effect = FullTextUnavailableError("Full text unavailable from sources.")
+
+        response = self.client.post(
+            "/api/papers/retrieve",
+            json={"doi": "10.1038/s41586-020-2649-2"},
+        )
+        assert response.status_code == 503
+        assert "Full text unavailable" in response.json()["detail"]

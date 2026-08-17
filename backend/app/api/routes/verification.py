@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.verification import VerificationAnalyzeRequest, VerificationResponse
 from app.services.paper_retriever import (
     DocumentRetrievalFailure,
+    FullTextUnavailableError,
     PaperNotFoundError,
     PaperProviderError,
 )
@@ -28,7 +29,7 @@ def analyze_verification_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except PaperNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except DocumentRetrievalFailure as exc:
+    except (DocumentRetrievalFailure, FullTextUnavailableError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except PaperProviderError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

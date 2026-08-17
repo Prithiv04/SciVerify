@@ -87,6 +87,9 @@ export const VERDICTS: Record<VerdictKey, VerdictConfig> = {
   },
 }
 
-export function getVerdictConfig(key: VerdictKey): VerdictConfig {
-  return VERDICTS[key]
+export function getVerdictConfig(key: string | VerdictKey): VerdictConfig {
+  const normalized = (
+    typeof key === 'string' ? key.trim().toUpperCase() : key
+  ) as VerdictKey
+  return VERDICTS[normalized] ?? VERDICTS.INSUFFICIENT
 }

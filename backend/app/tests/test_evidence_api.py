@@ -15,6 +15,7 @@ from app.schemas.paper import (
 )
 from app.services.paper_retriever import (
     DocumentRetrievalFailure,
+    FullTextUnavailableError,
     PaperNotFoundError,
     PaperProviderError,
 )
@@ -192,3 +193,14 @@ class TestEvidenceApi:
 
         assert response.status_code == 200
         EvidenceRetrievalResponse.model_validate(response.json())
+
+    @patch("app.api.routes.evidence.retrieve_paper")
+    def test_full_text_unavailable_error(self, mock_retrieve: MagicMock) -> None:
+        mock_retrieve.side_effect = FullTextUnavailableError("Full text could not be found.")
+
+        response = self.client.post(
+            "/api/evidence/retrieve",
+            json={"claim": "accuracy improved by 40%", "doi": "10.1000/test"},
+        )
+        assert response.status_code == 503
+        assert "Full text could not be found." in response.json()["detail"]

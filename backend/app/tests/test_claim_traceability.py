@@ -682,3 +682,230 @@ class TestTraceabilityVerdictConsistency:
 
         assert result.verdict == Verdict.OVERSTATED
         assert result.suggested_correction == "The method improves accuracy by about 12%."
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for coverage robustness across scientific claims,
+# including multi-chunk evidence, numeric matches, paraphrases, and hedges.
+# ---------------------------------------------------------------------------
+
+
+class TestTraceabilityCoverageRobustness:
+    """Verifies that traceability coverage accurately reflects semantic and
+    numeric support across evidence chunks, without artificial penalties
+    due to paraphrasing, parenthetical statistics, or multi-chunk splits.
+    """
+
+    def test_bnt162b2_covid_vaccine_claim_is_fully_supported(self) -> None:
+        """BNT162b2 95% efficacy claim with multi-chunk clinical trial evidence
+        must achieve SUPPORTED status (>= 65% coverage) rather than being
+        artificially penalized as PARTIALLY_SUPPORTED."""
+        claim = (
+            "The BNT162b2 mRNA vaccine was approximately 95% effective at "
+            "preventing COVID-19 after the second dose in the phase 2/3 trial."
+        )
+        evidence = [
+            _evidence(
+                "c1",
+                (
+                    "A total of 43,548 participants underwent randomization: "
+                    "21,720 with BNT162b2 and 21,728 with placebo. There were 8 cases "
+                    "of Covid-19 with onset at least 7 days after the second dose "
+                    "among participants assigned to receive BNT162b2 and 162 cases "
+                    "among those assigned to placebo; BNT162b2 was 95.0% effective "
+                    "(95% credible interval, 90.3 to 97.6) in preventing Covid-19."
+                ),
+                relevance=0.85,
+                claim_overlap=0.72,
+                numeric_overlap=1.0,
+                evidence_numbers=["43548", "21720", "21728", "8", "7days", "162", "95.0%", "95%", "90.3", "97.6"],
+            ),
+            _evidence(
+                "c2",
+                (
+                    "The favorable safety profile observed during phase 1 testing of BNT162b2 "
+                    "was confirmed in the phase 2/3 portion of the trial."
+                ),
+                relevance=0.75,
+                claim_overlap=0.65,
+                numeric_overlap=1.0,
+                evidence_numbers=["1", "2", "3", "2/3"],
+            ),
+            _evidence(
+                "c3",
+                (
+                    "A two-dose regimen of BNT162b2 (30 μg per dose, given 21 days apart) "
+                    "was found to be safe and 95% effective in preventing Covid-19."
+                ),
+                relevance=0.80,
+                claim_overlap=0.70,
+                numeric_overlap=1.0,
+                evidence_numbers=["30μg", "21days", "95%"],
+            ),
+        ]
+
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+        )
+
+        assert result is not None
+        assert result.overall_coverage >= 0.65, (
+            f"Expected overall coverage >= 65%, got {result.overall_coverage*100:.1f}%"
+        )
+        assert all(seg.status == ClaimSegmentStatus.SUPPORTED for seg in result.segments), (
+            f"Expected all segments to be SUPPORTED, got {[s.status for s in result.segments]}"
+        )
+        assert len(result.segments[0].evidence_ids) >= 2, (
+            "Expected multiple linked evidence chunks"
+        )
+
+    def test_exact_numerical_support_yields_high_coverage(self) -> None:
+        """Exact numeric matches (e.g. 94.2% accuracy) achieve >= 65% coverage."""
+        claim = "The model achieved 94.2% accuracy on the benchmark."
+        evidence = [
+            _evidence(
+                "c1",
+                "The proposed architecture achieved an accuracy of 94.2% on the benchmark dataset.",
+                relevance=0.9,
+                claim_overlap=0.85,
+                numeric_overlap=1.0,
+                evidence_numbers=["94.2%"],
+            )
+        ]
+        result = build_claim_traceability(claim, evidence, verdict=Verdict.SUPPORTS)
+        assert result is not None
+        assert result.overall_coverage >= 0.65
+        assert result.segments[0].status == ClaimSegmentStatus.SUPPORTED
+
+    def test_approximate_numerical_hedges_do_not_penalize_coverage(self) -> None:
+        """Hedges like 'approximately 95%' matching '95%' must achieve SUPPORTED status."""
+        claim = "Efficacy was approximately 95% across the cohort."
+        evidence = [
+            _evidence(
+                "c1",
+                "Vaccine efficacy was 95% across the evaluated cohort.",
+                relevance=0.88,
+                claim_overlap=0.82,
+                numeric_overlap=1.0,
+                evidence_numbers=["95%"],
+            )
+        ]
+        result = build_claim_traceability(claim, evidence, verdict=Verdict.SUPPORTS)
+        assert result is not None
+        assert result.overall_coverage >= 0.65
+        assert result.segments[0].status == ClaimSegmentStatus.SUPPORTED
+
+    def test_paraphrase_with_intercalated_parenthetical_qualifiers(self) -> None:
+        """Scientific sentences with intervening CI intervals or preposition differences
+        (e.g., 'at preventing' vs 'in preventing') maintain SUPPORTED status."""
+        claim = "The drug was effective at preventing infection after the second dose."
+        evidence = [
+            _evidence(
+                "c1",
+                "The drug demonstrated efficacy in preventing infection (95% CI, 90 to 98) 7 days after the second dose.",
+                relevance=0.82,
+                claim_overlap=0.74,
+                numeric_overlap=0.5,
+                evidence_numbers=["95%", "90", "98", "7days"],
+            )
+        ]
+        result = build_claim_traceability(claim, evidence, verdict=Verdict.SUPPORTS)
+        assert result is not None
+        assert result.overall_coverage >= 0.65
+        assert result.segments[0].status == ClaimSegmentStatus.SUPPORTED
+
+    def test_multi_part_claim_with_each_part_supported(self) -> None:
+        """Multi-part claim where each segment is supported by complementary chunks."""
+        claim = "Cas9 uses guide RNA and introduces double-strand breaks in DNA."
+        evidence = [
+            _evidence("c1", "Cas9 uses single guide RNA in the complex.", relevance=0.85, claim_overlap=0.75),
+            _evidence("c2", "Cas9 introduces double-strand breaks in target DNA.", relevance=0.88, claim_overlap=0.78),
+        ]
+        result = build_claim_traceability(claim, evidence, verdict=Verdict.SUPPORTS)
+        assert result is not None
+        assert result.overall_coverage >= 0.65
+        assert all(seg.status == ClaimSegmentStatus.SUPPORTED for seg in result.segments)
+
+    def test_genuinely_partial_claim_preserves_partial_status(self) -> None:
+        """When evidence supports only one part of a multi-part claim, the unsupported
+        part must remain PARTIALLY_SUPPORTED or UNSUPPORTED."""
+        claim = "The treatment improves survival and eliminates all side effects."
+        evidence = [
+            _evidence(
+                "c1",
+                "The treatment improved overall survival in the trial cohort.",
+                relevance=0.65,
+                claim_overlap=0.50,
+            )
+        ]
+        result = build_claim_traceability(claim, evidence, verdict=Verdict.OVERSTATED)
+        assert result is not None
+        statuses = [s.status for s in result.segments]
+        assert (
+            ClaimSegmentStatus.PARTIALLY_SUPPORTED in statuses
+            or ClaimSegmentStatus.UNSUPPORTED in statuses
+        )
+
+    def test_genuinely_contradicted_segment_preserves_contradicted_status(self) -> None:
+        """When adjudicator definitively flags contradicting evidence, segment is CONTRADICTED."""
+        claim = "The treatment reduces patient mortality."
+        evidence = [
+            _evidence(
+                "c1",
+                "Mortality was significantly higher in the treatment arm compared to control.",
+                relevance=0.85,
+                claim_overlap=0.75,
+            )
+        ]
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Evidence directly contradicts the claim.",
+            verdict=Verdict.CONTRADICTS,
+            confidence=0.9,
+            reasoning="Trial mortality increased.",
+            contradicting_evidence=["c1"],
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.CONTRADICTS,
+            adjudicator=adjudicator,
+        )
+        assert result is not None
+        assert any(seg.status == ClaimSegmentStatus.CONTRADICTED for seg in result.segments)
+
+    def test_prosecutor_adversarial_evidence_does_not_override_supports_traceability(self) -> None:
+        """Prosecutor challenging does not mark segments CONTRADICTED when final verdict is SUPPORTS."""
+        claim = "The treatment improves survival."
+        evidence = [
+            _evidence("c1", "Treatment significantly improved survival across all trial sites.", relevance=0.9, claim_overlap=0.85)
+        ]
+        prosecutor = ProsecutorAnalysis(
+            agent="prosecutor",
+            analysis="Challenging sample size.",
+            stance="challenge",
+            contradicting_evidence=["c1"],
+            confidence=0.6,
+        )
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Claim is supported.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.88,
+            reasoning="Evidence is strong.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adjudicator,
+            prosecutor=prosecutor,
+        )
+        assert result is not None
+        assert all(seg.status != ClaimSegmentStatus.CONTRADICTED for seg in result.segments)
+        assert result.segments[0].status == ClaimSegmentStatus.SUPPORTED
+

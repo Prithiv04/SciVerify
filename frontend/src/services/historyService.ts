@@ -6,7 +6,19 @@ import type {
 } from '@/types/history'
 import type { VerificationResult } from '@/types/verification'
 
+import { VERDICT_KEYS, type VerdictKey } from '@/constants/verdicts'
+
 const GENERIC_HISTORY_ERROR = 'Unable to access verification history.'
+
+function resolveVerdict(rawVerdict: unknown): VerdictKey {
+  if (typeof rawVerdict === 'string') {
+    const upper = rawVerdict.trim().toUpperCase()
+    if ((VERDICT_KEYS as readonly string[]).includes(upper)) {
+      return upper as VerdictKey
+    }
+  }
+  return 'INSUFFICIENT'
+}
 
 function resolveDoi(result: VerificationResult): string {
   if (result.paperDoi?.trim()) {
@@ -39,14 +51,15 @@ function toInsertRow(
 }
 
 function rebuildMinimalResult(row: VerificationHistoryRow): VerificationResult {
+  const verdict = resolveVerdict(row.verdict)
   return {
     id: row.id,
-    claim: row.claim,
-    citation: row.doi,
+    claim: row.claim || 'Unspecified claim',
+    citation: row.doi || 'Unknown citation',
     sourceType: 'doi',
-    citationStatus: row.verdict === 'FABRICATED' ? 'fabricated' : 'verified',
-    verdict: row.verdict,
-    confidence: Number(row.confidence),
+    citationStatus: verdict === 'FABRICATED' ? 'fabricated' : 'verified',
+    verdict,
+    confidence: Number(row.confidence) || 0,
     summary: row.summary ?? 'Verification summary unavailable.',
     reasoning: row.summary ?? 'Verification reasoning unavailable.',
     paperTitle: row.paper_title ?? undefined,
@@ -76,7 +89,7 @@ function rebuildMinimalResult(row: VerificationHistoryRow): VerificationResult {
     },
     evidence: [],
     suggestedCorrection: null,
-    createdAt: row.created_at,
+    createdAt: row.created_at || new Date().toISOString(),
   }
 }
 
@@ -86,12 +99,30 @@ export function parseStoredVerificationResult(
   const raw = row.result_json
 
   if (raw && typeof raw === 'object' && 'claim' in raw && 'verdict' in raw) {
+    const rawResult = raw as VerificationResult
     return {
-      ...(raw as VerificationResult),
-      id: row.id,
-      createdAt: row.created_at,
-      paperTitle: (raw as VerificationResult).paperTitle ?? row.paper_title ?? undefined,
-      paperDoi: (raw as VerificationResult).paperDoi ?? row.doi,
+      ...rawResult,
+      id: row.id || rawResult.id,
+      verdict: resolveVerdict(rawResult.verdict ?? row.verdict),
+      confidence:
+        typeof rawResult.confidence === 'number'
+          ? rawResult.confidence
+          : Number(row.confidence) || 0,
+      createdAt:
+        row.created_at || rawResult.createdAt || new Date().toISOString(),
+      paperTitle:
+        rawResult.paperTitle ?? row.paper_title ?? undefined,
+      paperDoi: rawResult.paperDoi ?? row.doi,
+      agentAgreement: rawResult.agentAgreement ?? null,
+      validationWarnings: Array.isArray(rawResult.validationWarnings)
+        ? rawResult.validationWarnings
+        : [],
+      evidenceFactors: Array.isArray(rawResult.evidenceFactors)
+        ? rawResult.evidenceFactors
+        : [],
+      evidence: Array.isArray(rawResult.evidence)
+        ? rawResult.evidence
+        : [],
     }
   }
 
