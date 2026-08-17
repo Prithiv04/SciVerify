@@ -13,6 +13,7 @@ from app.services.evidence_pipeline import retrieve_evidence_for_claim
 from app.services.llm.provider import (
     LLMProvider,
     LLMProviderError,
+    LLMRateLimitError,
     LLMResponseError,
     LLMUnavailableError,
     get_llm_provider,
@@ -112,7 +113,11 @@ def analyze_verification(
             detail=str(exc),
         )
     except (LLMProviderError, LLMResponseError) as exc:
-        logger.info("verification_completed status=verification_failed")
+        logger.info(
+            "verification_completed status=verification_failed error_type=%s detail=%s",
+            type(exc).__name__,
+            exc,
+        )
         return VerificationResponse(
             status=VerificationStatus.VERIFICATION_FAILED,
             claim=processed_claim.original,

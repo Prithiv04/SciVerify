@@ -42,7 +42,7 @@ export default function VerifyPage() {
 
   const phase = (() => {
     if (submissionPhase === 'loading') return 'loading' as const
-    if (submissionPhase === 'error' && !verificationId) return 'error' as const
+    if (submissionPhase === 'error') return 'error' as const
     if (verificationId) {
       if (!historyHydrated || historyLoading) return 'history-loading' as const
       return storedRecord ? ('result' as const) : ('error' as const)
@@ -102,9 +102,11 @@ export default function VerifyPage() {
   }
 
   const reportErrorMessage =
-    verificationId && !storedRecord
-      ? 'Verification report not found.'
-      : errorMessage
+    submissionPhase === 'error'
+      ? errorMessage
+      : verificationId && !storedRecord
+        ? 'Verification report not found.'
+        : errorMessage
 
   return (
     <div>

@@ -33,6 +33,10 @@ class LLMProviderError(Exception):
     """Raised when an LLM provider fails."""
 
 
+class LLMRateLimitError(LLMProviderError):
+    """Raised when an LLM provider hits rate limits or quota exhaustion."""
+
+
 class LLMUnavailableError(LLMProviderError):
     """Raised when no LLM provider is configured or available."""
 
@@ -266,6 +270,17 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 f"LLM provider is unavailable (HTTP {response.status_code})."
             )
 
+        if response.status_code == 429:
+            error_body = _safe_provider_error_body(response)
+            logger.error(
+                "LLM provider rate limited (HTTP 429): status=%s url=%s model=%s body=%s",
+                response.status_code,
+                request_url,
+                self.model,
+                error_body,
+            )
+            raise LLMRateLimitError(_provider_error_message(response))
+
         if response.status_code >= 400:
             error_body = _safe_provider_error_body(response)
             logger.error(
@@ -333,10 +348,10 @@ class OpenAICompatibleLLMProvider(LLMProvider):
                 except Exception:
                     pass
                 if error_msg:
-                    raise LLMProviderError(
+                    raise LLMRateLimitError(
                         f"LLM quota exhausted (daily token limit reached): {error_msg}"
                     )
-                raise LLMProviderError(
+                raise LLMRateLimitError(
                     "LLM quota exhausted (daily token limit reached)."
                 )
 

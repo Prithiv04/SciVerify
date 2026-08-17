@@ -116,24 +116,40 @@ function handleApplicationStatus(
     throw new VerificationServiceError(
       response.detail ??
         'The AI verification service is temporarily unavailable. Please try again later.',
+      503,
     )
   }
 
   if (response.status === 'verification_failed') {
+    const detail = response.detail ?? ''
+    const isRateLimit =
+      detail.includes('429') ||
+      detail.toLowerCase().includes('rate limit') ||
+      detail.toLowerCase().includes('quota')
+    if (isRateLimit) {
+      throw new VerificationServiceError(
+        detail ||
+          'The AI verification service is temporarily rate limited. Please try again later.',
+        429,
+      )
+    }
     throw new VerificationServiceError(
-      response.detail ?? 'Verification could not be completed.',
+      detail || 'Verification could not be completed.',
+      500,
     )
   }
 
   if (response.status !== 'success') {
     throw new VerificationServiceError(
       response.detail ?? 'Verification could not be completed.',
+      500,
     )
   }
 
   if (!response.verdict) {
     throw new VerificationServiceError(
       'Verification completed without a final verdict.',
+      500,
     )
   }
 

@@ -161,6 +161,30 @@ class TestVerificationService:
 
         assert result.status == VerificationStatus.INSUFFICIENT_EVIDENCE
 
+    @patch("app.services.verification_service.retrieve_evidence_for_claim")
+    def test_llm_rate_limit_429_returns_verification_failed(self, mock_evidence: MagicMock) -> None:
+        from app.services.llm.provider import LLMRateLimitError
+
+        mock_evidence.return_value = SUCCESS_EVIDENCE
+
+        class RateLimitedLLM(UnavailableLLMProvider):
+            def generate(self, prompt, *, system=None, response_model=None):
+                raise LLMRateLimitError("LLM provider rate limit exceeded (HTTP 429). Please retry shortly.")
+
+        result = analyze_verification(
+            "The method improves accuracy by 40%.",
+            "10.1000/test",
+            llm=RateLimitedLLM(),
+        )
+
+        assert result.status == VerificationStatus.VERIFICATION_FAILED
+        assert result.verdict is None
+        assert result.confidence is None
+        assert result.prosecutor is None
+        assert result.defender is None
+        assert result.adjudicator is None
+        assert "429" in (result.detail or "")
+
     def test_invalid_claim(self) -> None:
         from app.utils.claim_preprocessor import InvalidClaimError
 

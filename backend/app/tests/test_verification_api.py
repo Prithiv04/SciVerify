@@ -180,3 +180,28 @@ class TestVerificationApi:
         )
         assert response.status_code == 503
         assert "Full text could not be found." in response.json()["detail"]
+
+    @patch("app.api.routes.verification.analyze_verification")
+    def test_rate_limit_failed_status_response(self, mock_analyze: MagicMock) -> None:
+        mock_analyze.return_value = VerificationResponse(
+            status=VerificationStatus.VERIFICATION_FAILED,
+            claim="accuracy improved",
+            paper=EvidencePaperSummary(
+                paper_id="10.1000/test",
+                doi="10.1000/test",
+                title="Example Paper",
+            ),
+            evidence=[],
+            detail="LLM provider rate limit exceeded (HTTP 429). Please retry shortly.",
+        )
+
+        response = self.client.post(
+            "/api/verification/analyze",
+            json={"claim": "accuracy improved", "doi": "10.1000/test"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "verification_failed"
+        assert "429" in data["detail"]
+        assert data["verdict"] is None
+
