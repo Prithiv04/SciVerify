@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Panel } from '@/components/ui/Card'
 import { Spinner } from '@/components/ui/Spinner'
 import type { VerificationFormSchema } from '@/lib/validations/verification'
+import type { VerificationResult } from '@/types/verification'
 
 type SubmissionPhase = 'idle' | 'loading' | 'error'
 
@@ -28,6 +29,7 @@ export default function VerifyPage() {
 
   const [submissionPhase, setSubmissionPhase] = useState<SubmissionPhase>('idle')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [freshResult, setFreshResult] = useState<VerificationResult | null>(null)
 
   const storedRecord = verificationId ? getRecord(verificationId) : undefined
 
@@ -40,9 +42,17 @@ export default function VerifyPage() {
     }
   }, [location.state, navigate, verificationId])
 
+  useEffect(() => {
+    // Reset transient submission state on route change
+    setSubmissionPhase('idle')
+    setErrorMessage(null)
+    setFreshResult(null)
+  }, [verificationId])
+
   const phase = (() => {
     if (submissionPhase === 'loading') return 'loading' as const
     if (submissionPhase === 'error') return 'error' as const
+    if (freshResult) return 'result' as const
     if (verificationId) {
       if (!historyHydrated || historyLoading) return 'history-loading' as const
       return storedRecord ? ('result' as const) : ('error' as const)
@@ -50,7 +60,7 @@ export default function VerifyPage() {
     return 'form' as const
   })()
 
-  const result = storedRecord ?? null
+  const result = freshResult ?? storedRecord ?? null
 
   const handleSubmit = async (values: VerificationFormSchema) => {
     if (!user?.id) {
@@ -58,6 +68,7 @@ export default function VerifyPage() {
       return
     }
 
+    setFreshResult(null)
     setSubmissionPhase('loading')
     setErrorMessage(null)
 
@@ -69,6 +80,7 @@ export default function VerifyPage() {
         context: values.context,
       })
 
+      setFreshResult(verificationResult)
       const { saved } = await addRecord(user.id, verificationResult)
       setSubmissionPhase('idle')
       navigate(verificationReportPath(verificationResult.id), { replace: true })
@@ -77,21 +89,19 @@ export default function VerifyPage() {
         toast.warning('Could not save to history. The report is still available now.')
       }
     } catch (error) {
+      setFreshResult(null)
       setSubmissionPhase('error')
-      setErrorMessage(
+      const message =
         error instanceof Error
           ? error.message
-          : 'Verification could not be completed.',
-      )
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : 'Verification could not be completed.',
-      )
+          : 'Verification could not be completed.'
+      setErrorMessage(message)
+      toast.error(message)
     }
   }
 
   const handleNewVerification = () => {
+    setFreshResult(null)
     setSubmissionPhase('idle')
     setErrorMessage(null)
     navigate(ROUTES.APP_VERIFY, { replace: true })
@@ -172,18 +182,20 @@ export default function VerifyPage() {
       {phase === 'error' ? (
         <Panel padding="md" className="space-y-4 border-danger/30">
           <p className="font-medium text-text-primary">
-            {verificationId
-              ? 'Verification report not found.'
-              : 'Verification could not be completed.'}
+            {submissionPhase === 'error'
+              ? 'Verification could not be completed.'
+              : verificationId
+                ? 'Verification report not found.'
+                : 'Verification could not be completed.'}
           </p>
           <p className="text-sm text-danger">{reportErrorMessage}</p>
           <div className="flex flex-wrap gap-2">
+            <Button onClick={handleNewVerification}>Try again</Button>
             {verificationId ? (
               <Button variant="outline" onClick={() => navigate(ROUTES.APP_HISTORY)}>
                 View history
               </Button>
             ) : null}
-            <Button onClick={handleNewVerification}>Try again</Button>
           </div>
         </Panel>
       ) : null}
