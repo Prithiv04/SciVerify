@@ -457,3 +457,161 @@ class TestCoverageVerdictAlignment:
             ),
         )
         assert result.confidence <= 0.5
+
+
+# ---------------------------------------------------------------------------
+# Agent agreement: additional regression tests for real-world patterns
+# ---------------------------------------------------------------------------
+
+
+class TestAgentAgreementRealWorldPatterns:
+    """Additional agent agreement tests for the specific real-world pattern
+    observed during live verification (Cas9 DOI run).
+
+    The live run produced:
+      - Prosecutor: stance="challenge", contradicting_evidence=["c..."], confidence~0.6
+      - Defender:   stance="Supported",  supporting_evidence=["c..."], confidence~0.95
+      - Final verdict: SUPPORTS
+
+    With both agents >= 0.5 confidence in opposing roles, agent_agreement=False
+    is the CORRECT and expected behavior.  The "Agents disagree" badge is
+    accurate even on a SUPPORTS verdict — it indicates the evidence was
+    contested before the adjudicator resolved it.
+    """
+
+    def test_challenge_stance_plus_high_defender_confidence_is_disagreement(
+        self,
+    ) -> None:
+        """Prosecutor uses 'challenge' stance with contradicting evidence at 0.6
+        confidence; Defender strongly supports at 0.95 confidence.
+        Both >= 0.5 threshold → agent_agreement must be False."""
+        result = validate_verification_result(
+            claim="Cas9 can be programmed with guide RNA.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(
+                stance="challenge",
+                contradicting_evidence=["c1"],
+                supporting_evidence=[],
+                confidence=0.6,
+            ),
+            defender=_defender(
+                stance="supported",
+                supporting_evidence=["c1"],
+                contradicting_evidence=[],
+                confidence=0.95,
+            ),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS),
+        )
+        # Both agents are >= 0.5 confidence in opposing roles → disagreement
+        assert result.agent_agreement is False
+
+    def test_challenge_stance_below_threshold_is_agreement(
+        self,
+    ) -> None:
+        """Prosecutor uses 'challenge' stance at 0.4 confidence (below 0.5
+        threshold); Defender strongly supports at 0.95.
+        Only one agent is >= 0.5 → agent_agreement must be True."""
+        result = validate_verification_result(
+            claim="Cas9 can be programmed with guide RNA.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(
+                stance="challenge",
+                contradicting_evidence=["c1"],
+                supporting_evidence=[],
+                confidence=0.4,  # below threshold
+            ),
+            defender=_defender(
+                stance="supported",
+                supporting_evidence=["c1"],
+                contradicting_evidence=[],
+                confidence=0.95,
+            ),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS),
+        )
+        assert result.agent_agreement is True
+
+    def test_supports_verdict_agent_disagreement_does_not_override_verdict(
+        self,
+    ) -> None:
+        """Even when agents disagree (agent_agreement=False), the final verdict
+        SUPPORTS must not be changed — the adjudicator resolves the dispute."""
+        result = validate_verification_result(
+            claim="Cas9 can be programmed with guide RNA.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(
+                stance="challenge",
+                contradicting_evidence=["c1"],
+                confidence=0.7,
+            ),
+            defender=_defender(
+                stance="supported",
+                supporting_evidence=["c1"],
+                confidence=0.9,
+            ),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS, supporting_evidence=["c1"]),
+        )
+        # Verdict must remain SUPPORTS; agent disagreement is informational only
+        assert result.verdict == Verdict.SUPPORTS
+        # agent_agreement=False is expected (both >= 0.5 in opposing roles)
+        assert result.agent_agreement is False
+
+    def test_prosecutor_normal_challenge_with_low_confidence_does_not_disagree(
+        self,
+    ) -> None:
+        """Prosecutor does its normal role (challenges) at low confidence.
+        This is expected behavior, not genuine disagreement."""
+        result = validate_verification_result(
+            claim="The method improves accuracy.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(
+                stance="challenge",
+                contradicting_evidence=["c1"],
+                confidence=0.45,  # just below 0.5
+            ),
+            defender=_defender(
+                stance="supportive",
+                supporting_evidence=["c1"],
+                confidence=0.8,
+            ),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS),
+        )
+        assert result.agent_agreement is True
+
+    def test_strongly_opposing_both_high_confidence_is_disagreement(
+        self,
+    ) -> None:
+        """Prosecutor strongly challenges AND Defender strongly supports, both
+        with high confidence → genuine disagreement."""
+        result = validate_verification_result(
+            claim="The method improves accuracy.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(
+                stance="skeptical",
+                contradicting_evidence=["c1"],
+                confidence=0.85,
+            ),
+            defender=_defender(
+                stance="supportive",
+                supporting_evidence=["c1"],
+                confidence=0.9,
+            ),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS),
+        )
+        assert result.agent_agreement is False
+
+    def test_confidence_calibration_unchanged_by_traceability_fix(
+        self,
+    ) -> None:
+        """Confidence calibration must be unchanged after the traceability fix.
+        This is a smoke-test for the single source of truth invariant."""
+        result = validate_verification_result(
+            claim="The method improves accuracy.",
+            evidence=[_strong_evidence()],
+            prosecutor=_prosecutor(contradicting_evidence=[], stance="neutral"),
+            defender=_defender(),
+            adjudicator=_adjudicator(verdict=Verdict.SUPPORTS, confidence=0.85),
+        )
+        # Must be in [0.0, 1.0]
+        assert 0.0 <= result.confidence <= 1.0
+        # Calibrated value should be roughly close to the raw (no major penalties)
+        assert result.confidence >= 0.6  # strong evidence, agree, no warnings

@@ -302,3 +302,383 @@ class TestClaimTraceability:
 
         assert result is not None
         assert result.segments[0].evidence_ids == ["c1"]
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for consistency between traceability status and final
+# verdict — added to cover the real-world report inconsistency issues.
+# ---------------------------------------------------------------------------
+
+
+class TestTraceabilityVerdictConsistency:
+    """Traceability segment status must never override or masquerade as the
+    final verdict.
+
+    Rules verified:
+    - Final verdict SUPPORTS is not contradicted by a PARTIALLY_SUPPORTED
+      segment (the segment describes coverage, not the verdict).
+    - CONTRADICTED status only appears when the adjudicator definitively
+      references a chunk as contradicting.
+    - Prosecutor's normal adversarial contradicting_evidence does NOT mark
+      segments as CONTRADICTED on a SUPPORTS verdict.
+    - Multiple segments with mixed coverage still yield the correct overall
+      coverage without polluting the verdict.
+    """
+
+    def test_supports_verdict_with_partially_supported_segment_is_not_contradicted(
+        self,
+    ) -> None:
+        """SUPPORTS final verdict + PARTIALLY_SUPPORTED segment — segment status
+        must be PARTIALLY_SUPPORTED, not CONTRADICTED."""
+        claim = (
+            "Cas9 can be programmed with guide RNA to introduce double-strand "
+            "breaks in DNA."
+        )
+        evidence = [
+            _evidence(
+                "c1",
+                "Cas9 can be programmed with guide RNA.",
+                claim_overlap=0.6,
+                relevance=0.7,
+            )
+        ]
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+        )
+
+        assert result is not None
+        statuses = {seg.status for seg in result.segments}
+        assert ClaimSegmentStatus.CONTRADICTED not in statuses, (
+            "Segments must not be marked CONTRADICTED when verdict is SUPPORTS"
+        )
+        assert ClaimSegmentStatus.PARTIALLY_SUPPORTED in statuses or (
+            ClaimSegmentStatus.SUPPORTED in statuses
+        )
+
+    def test_supports_52_percent_coverage_does_not_use_contradicted_label(
+        self,
+    ) -> None:
+        """52% coverage with a SUPPORTS verdict must NOT render CONTRADICTED."""
+        claim = (
+            "Cas9 can be programmed with guide RNA to introduce double-strand "
+            "breaks in DNA."
+        )
+        evidence = [
+            _evidence(
+                "c1",
+                "Cas9 uses guide RNA.",
+                claim_overlap=0.4,
+                relevance=0.55,
+            )
+        ]
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Claim is supported.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.84,
+            reasoning="Evidence supports the claim.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adjudicator,
+        )
+
+        assert result is not None
+        statuses = {seg.status for seg in result.segments}
+        assert ClaimSegmentStatus.CONTRADICTED not in statuses, (
+            "52% coverage on a SUPPORTS verdict must not label any segment CONTRADICTED"
+        )
+
+    def test_prosecutor_adversarial_contradicting_evidence_does_not_mark_contradicted(
+        self,
+    ) -> None:
+        """The Prosecutor routinely lists contradicting evidence — this is its
+        role.  When the adjudicator verdict is SUPPORTS and the adjudicator
+        has NO contradicting_evidence, no segment must be CONTRADICTED."""
+        claim = "Cas9 can be programmed with guide RNA."
+        evidence = [
+            _evidence(
+                "c1",
+                "We demonstrate Cas9 can be programmed with single guide RNAs.",
+                claim_overlap=0.85,
+                relevance=0.9,
+            )
+        ]
+        prosecutor = ProsecutorAnalysis(
+            agent="prosecutor",
+            analysis="Attempting to challenge the claim.",
+            stance="challenge",
+            contradicting_evidence=["c1"],  # prosecutor challenged via c1
+            confidence=0.6,
+        )
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Claim is well supported.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.85,
+            reasoning="Clear evidence found.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],  # adjudicator did NOT flag c1 as contradicting
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adjudicator,
+            prosecutor=prosecutor,
+        )
+
+        assert result is not None
+        for segment in result.segments:
+            assert segment.status != ClaimSegmentStatus.CONTRADICTED, (
+                f"Segment '{segment.text}' must not be CONTRADICTED when adjudicator "
+                f"verdict is SUPPORTS and adjudicator has no contradicting_evidence. "
+                f"Got: {segment.status}"
+            )
+
+    def test_genuine_contradicted_segment_when_adjudicator_references_chunk(
+        self,
+    ) -> None:
+        """When the adjudicator explicitly lists a chunk as contradicting
+        evidence, that segment CAN and SHOULD be marked CONTRADICTED."""
+        claim = "The drug reduces inflammation."
+        evidence = [
+            _evidence(
+                "c1",
+                "Inflammation increased significantly in the treatment arm.",
+                claim_overlap=0.72,
+                relevance=0.8,
+            )
+        ]
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Evidence contradicts the claim.",
+            verdict=Verdict.CONTRADICTS,
+            confidence=0.88,
+            reasoning="The evidence shows the opposite effect.",
+            supporting_evidence=[],
+            contradicting_evidence=["c1"],  # adjudicator definitively flags c1
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.CONTRADICTS,
+            adjudicator=adjudicator,
+        )
+
+        assert result is not None
+        assert any(
+            seg.status == ClaimSegmentStatus.CONTRADICTED for seg in result.segments
+        ), "A genuinely contradicted segment must be labeled CONTRADICTED"
+
+    def test_prosecutor_challenges_defender_supports_normal_adversarial_role(
+        self,
+    ) -> None:
+        """Normal adversarial role behavior: prosecutor challenges (contradicting
+        evidence listed) and defender supports — when the adjudicator's verdict
+        is SUPPORTS and its contradicting_evidence list is empty, NO segment
+        must be marked CONTRADICTED."""
+        claim = "The treatment improves patient outcomes."
+        evidence = [
+            _evidence(
+                "c1",
+                "Patients in the treatment arm showed improved outcomes.",
+                claim_overlap=0.78,
+                relevance=0.82,
+            )
+        ]
+        prosecutor = ProsecutorAnalysis(
+            agent="prosecutor",
+            analysis="Challenging the claim: limited sample size.",
+            stance="challenge",
+            contradicting_evidence=["c1"],
+            supporting_evidence=[],
+            confidence=0.6,
+        )
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Claim is supported on balance.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.8,
+            reasoning="Defender evidence is stronger.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adjudicator,
+            prosecutor=prosecutor,
+        )
+
+        assert result is not None
+        statuses = {seg.status for seg in result.segments}
+        assert ClaimSegmentStatus.CONTRADICTED not in statuses
+
+    def test_backend_verdict_is_independent_of_traceability_segment_status(
+        self,
+    ) -> None:
+        """The segment statuses describe coverage only; they must not determine
+        the final verdict.  A segment can be PARTIALLY_SUPPORTED while the
+        overall verdict remains SUPPORTS."""
+        from app.services.verification_validator import validate_verification_result
+        from app.schemas.evidence import EvidenceItem
+        from app.schemas.verification import (
+            DefenderAnalysis,
+        )
+
+        evidence_items = [
+            EvidenceItem(
+                chunk_id="c1",
+                section="Results",
+                chunk_index=0,
+                text="Cas9 can be programmed with guide RNA.",
+                relevance_score=0.82,
+                claim_overlap=0.76,
+                numeric_overlap=0.0,
+            )
+        ]
+        prosecutor = ProsecutorAnalysis(
+            agent="prosecutor",
+            analysis="Challenging.",
+            stance="challenge",
+            contradicting_evidence=["c1"],
+            supporting_evidence=[],
+            confidence=0.6,
+        )
+        defender = DefenderAnalysis(
+            agent="defender",
+            analysis="Supporting.",
+            stance="supported",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+            confidence=0.9,
+        )
+        adj = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="SUPPORTS.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.85,
+            reasoning="Evidence clearly supports.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+        )
+
+        validated = validate_verification_result(
+            claim="Cas9 can be programmed with guide RNA.",
+            evidence=evidence_items,
+            prosecutor=prosecutor,
+            defender=defender,
+            adjudicator=adj,
+        )
+
+        # Verified verdict is SUPPORTS regardless of traceability segment status
+        assert validated.verdict == Verdict.SUPPORTS
+
+        # Build traceability with prosecutor present
+        traceability = build_claim_traceability(
+            "Cas9 can be programmed with guide RNA.",
+            evidence_items,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adj,
+            prosecutor=prosecutor,
+        )
+        assert traceability is not None
+        # No segment should be CONTRADICTED because adjudicator has no
+        # contradicting_evidence
+        for seg in traceability.segments:
+            assert seg.status != ClaimSegmentStatus.CONTRADICTED
+
+    def test_overall_coverage_is_informational_not_verdict_override(
+        self,
+    ) -> None:
+        """Even 52% overall coverage must not alter the SUPPORTS verdict.
+        Coverage is purely informational."""
+        claim = (
+            "Cas9 can be programmed with guide RNA to introduce double-strand "
+            "breaks in DNA."
+        )
+        evidence = [
+            _evidence("c1", "Cas9 uses RNA guides.", claim_overlap=0.4, relevance=0.55)
+        ]
+        adjudicator = AdjudicatorAnalysis(
+            agent="adjudicator",
+            analysis="Supports.",
+            verdict=Verdict.SUPPORTS,
+            confidence=0.84,
+            reasoning="Evidence supports the general claim.",
+            supporting_evidence=["c1"],
+            contradicting_evidence=[],
+        )
+        result = build_claim_traceability(
+            claim,
+            evidence,
+            verdict=Verdict.SUPPORTS,
+            adjudicator=adjudicator,
+        )
+
+        assert result is not None
+        # Coverage may be below 65% (partial) — that is acceptable
+        assert 0.0 <= result.overall_coverage <= 1.0
+        # No segments should be CONTRADICTED
+        statuses = {seg.status for seg in result.segments}
+        assert ClaimSegmentStatus.CONTRADICTED not in statuses
+
+    def test_existing_suggested_correction_behavior_unchanged(self) -> None:
+        """Existing suggested_correction test must pass — traceability changes
+        must not affect suggested_correction logic."""
+        from app.services.verification_validator import validate_verification_result
+        from app.schemas.evidence import EvidenceItem
+        from app.schemas.verification import DefenderAnalysis
+
+        evidence_items = [
+            EvidenceItem(
+                chunk_id="c1",
+                section="Results",
+                chunk_index=0,
+                text="Method improves accuracy by 12%.",
+                relevance_score=0.82,
+                claim_overlap=0.76,
+                numeric_overlap=0.0,
+            )
+        ]
+        result = validate_verification_result(
+            claim="The method improves accuracy by 40%.",
+            evidence=evidence_items,
+            prosecutor=ProsecutorAnalysis(
+                agent="prosecutor",
+                analysis="Challenged.",
+                stance="skeptical",
+                contradicting_evidence=["c1"],
+                supporting_evidence=[],
+                confidence=0.7,
+            ),
+            defender=DefenderAnalysis(
+                agent="defender",
+                analysis="Supported.",
+                stance="supportive",
+                supporting_evidence=["c1"],
+                contradicting_evidence=[],
+                confidence=0.7,
+            ),
+            adjudicator=AdjudicatorAnalysis(
+                agent="adjudicator",
+                analysis="Overstated.",
+                verdict=Verdict.OVERSTATED,
+                confidence=0.8,
+                reasoning="12% not 40%.",
+                supporting_evidence=["c1"],
+                contradicting_evidence=[],
+                suggested_correction="The method improves accuracy by about 12%.",
+            ),
+        )
+
+        assert result.verdict == Verdict.OVERSTATED
+        assert result.suggested_correction == "The method improves accuracy by about 12%."

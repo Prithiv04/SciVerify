@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from app.schemas.evidence import EvidenceItem
 from app.schemas.verification import (
     AdjudicatorAnalysis,
     ClaimSegmentStatus,
@@ -211,13 +212,22 @@ def _determine_segment_status(
 
 def _collect_contradicting_ids(
     adjudicator: AdjudicatorAnalysis | None,
-    prosecutor: ProsecutorAnalysis | None,
+    prosecutor: ProsecutorAnalysis | None,  # noqa: ARG001  # kept for API compat
 ) -> set[str]:
+    """Return chunk IDs that definitively contradict the claim.
+
+    Only the Adjudicator's ``contradicting_evidence`` is used here.  The
+    Prosecutor's list is intentionally adversarial — it always challenges the
+    claim — so including it would mark segments as CONTRADICTED even when the
+    final verdict is SUPPORTS.  The Adjudicator makes the authoritative call on
+    which evidence genuinely contradicts the claim.
+    """
     ids: set[str] = set()
     if adjudicator:
         ids.update(adjudicator.contradicting_evidence)
-    if prosecutor:
-        ids.update(prosecutor.contradicting_evidence)
+    # Deliberately NOT including prosecutor.contradicting_evidence here.
+    # Prosecutors challenge by design; their evidence references are not
+    # definitive contradictions and must not override the final verdict.
     return ids
 
 
