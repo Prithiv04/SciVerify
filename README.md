@@ -725,7 +725,236 @@ This executes TypeScript validation (`tsc -b`) and Vite production bundling. Out
 
 ---
 
-## 28. Contributing
+## 28. Production Deployment Guide
+
+SciVerify follows a simple, standard three-tier deployment architecture:
+
+```
+Browser
+  ↕ HTTPS
+Deployed Frontend (Vercel / Netlify / Cloudflare Pages)
+  ↕ HTTPS API calls
+Deployed Backend FastAPI (Cloud Run / Render / Railway / Fly.io)
+  ↕ HTTPS
+Supabase (PostgreSQL + Auth)    ←→    Groq / OpenAI API
+```
+
+### 28.1 Architecture Overview
+
+| Component | Recommended Host | Notes |
+| :--- | :--- | :--- |
+| **Frontend** (React + Vite) | Vercel / Netlify / Cloudflare Pages | Static SPA build. SPA routing covered by `vercel.json` and `public/_redirects`. |
+| **Backend** (FastAPI + Uvicorn) | Google Cloud Run / Render / Railway / Fly.io | Stateless; scales horizontally. Uses `PORT` env var from platform. |
+| **Database + Auth** | Supabase | Managed PostgreSQL with Row Level Security. |
+| **LLM Provider** | Groq Cloud (or any OpenAI-compatible endpoint) | Configured entirely through `LLM_*` environment variables. |
+
+---
+
+### 28.2 Required Environment Variables
+
+#### Backend
+
+Set these in your hosting platform's environment configuration. **Never commit real values.**
+
+```env
+# Server (your platform injects PORT automatically on most hosts)
+PORT=8000
+
+# CORS — your deployed frontend URL
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
+
+# LLM Provider
+LLM_PROVIDER=groq
+LLM_API_KEY=your_groq_api_key_here
+LLM_MODEL=openai/gpt-oss-120b
+LLM_BASE_URL=https://api.groq.com/openai/v1
+LLM_REQUEST_TIMEOUT=60
+
+# Document / Retrieval tuning (optional — defaults shown)
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+EVIDENCE_TOP_K=5
+PAPER_REQUEST_TIMEOUT=30
+```
+
+#### Frontend
+
+Set these in your hosting platform's environment configuration.
+
+```env
+VITE_API_BASE_URL=https://your-backend.run.app
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_public_key_here
+```
+
+> [!WARNING]
+> Only the Supabase **anon/public** key should ever appear in frontend environment variables.
+> Never place your Supabase `service_role` key, Groq key, or any secret in `VITE_*` variables.
+
+---
+
+### 28.3 Backend Deployment
+
+#### Option A — Docker (Cloud Run / Fly.io / Render)
+
+A production-ready `Dockerfile` is included at `backend/Dockerfile`.
+
+```bash
+# Build and test the Docker image locally
+cd backend
+docker build -t sciverify-backend .
+
+# Run with your actual environment variables
+docker run --rm -p 8000:8000 \
+  -e LLM_API_KEY=your_api_key \
+  -e LLM_MODEL=openai/gpt-oss-120b \
+  -e LLM_BASE_URL=https://api.groq.com/openai/v1 \
+  -e ALLOWED_ORIGINS=https://your-frontend.vercel.app \
+  sciverify-backend
+```
+
+Verify the health check:
+```bash
+curl http://localhost:8000/health
+# Expected: {"status":"ok","service":"sciverify-backend"}
+```
+
+#### Option B — Direct Uvicorn (Render / Railway / Fly.io)
+
+Configure your host to run:
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+The `PORT` env variable is automatically injected by Cloud Run, Render, Railway, and Fly.io.
+
+---
+
+### 28.4 Frontend Deployment
+
+#### Vercel (recommended)
+
+1. Connect your GitHub repository to Vercel.
+2. Set **Root Directory** to `frontend`.
+3. Framework Preset: **Vite**.
+4. Set environment variables in Vercel Dashboard → Settings → Environment Variables.
+5. Deploy. SPA routing is handled automatically by `frontend/vercel.json`.
+
+#### Netlify
+
+1. Connect your GitHub repository.
+2. Set **Base directory** to `frontend`, **Build command** to `npm run build`, **Publish directory** to `dist`.
+3. Set environment variables in Site Settings → Environment variables.
+4. SPA routing is handled automatically by `frontend/public/_redirects`.
+
+#### Cloudflare Pages
+
+1. Create a new Pages project from your GitHub repository.
+2. Build command: `npm run build`, Output directory: `dist`.
+3. Environment variables: add `VITE_*` keys in the Cloudflare dashboard.
+4. SPA routing is handled by `frontend/public/_redirects`.
+
+---
+
+### 28.5 Supabase Configuration
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Go to **SQL Editor** and run migrations in order:
+   ```bash
+   supabase/migrations/001_create_profiles.sql
+   supabase/migrations/002_create_verification_history.sql
+   ```
+3. Under **Authentication → URL Configuration**:
+   - **Site URL**: `https://your-frontend.vercel.app`
+   - **Redirect URLs**: add `https://your-frontend.vercel.app/reset-password`
+4. Copy **Project URL** and **anon/public key** from Project Settings → API.
+
+---
+
+### 28.6 CORS Configuration
+
+Set the `ALLOWED_ORIGINS` environment variable on your backend to your deployed frontend URL:
+
+```env
+ALLOWED_ORIGINS=https://your-frontend.vercel.app
+```
+
+For multiple origins (e.g. staging and production):
+```env
+ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://staging.your-frontend.vercel.app
+```
+
+`localhost` origins are always included automatically for local development.
+
+---
+
+### 28.7 Health Check
+
+Both endpoints return `{"status":"ok","service":"sciverify-backend"}`:
+
+```
+GET /health          (platform-level health probes)
+GET /api/health      (application-level health probes)
+```
+
+Use `/health` as your platform's health check or liveness probe path.
+
+---
+
+### 28.8 Local Production Verification
+
+Run these checks before deploying:
+
+```bash
+# 1. Backend: full test suite (must stay at 466 passing)
+cd backend
+python -m pytest -q
+
+# 2. Frontend: production build (must complete with 0 errors)
+cd ../frontend
+npm run build
+
+# 3. Backend: production startup
+cd ../backend
+uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+# 4. Health check
+curl http://localhost:8001/health
+
+# 5. Verification endpoint smoke test
+curl -s -X POST http://localhost:8001/api/verification/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"claim":"test","doi":"10.0000/invalid"}' | python -m json.tool
+```
+
+---
+
+### 28.9 Common Deployment Issues
+
+| Issue | Cause | Fix |
+| :--- | :--- | :--- |
+| Frontend shows "Cannot connect to SciVerify backend" | `VITE_API_BASE_URL` is wrong or missing | Set correct backend URL in frontend env vars; rebuild and redeploy. |
+| CORS errors in browser | `ALLOWED_ORIGINS` on backend not set to your frontend URL | Update `ALLOWED_ORIGINS` env var and restart backend. |
+| Deep page refresh returns 404 | SPA routing not configured on the host | `frontend/vercel.json` covers Vercel; `public/_redirects` covers Netlify / Cloudflare. |
+| Backend returns `verification_failed` on every request | `LLM_API_KEY` is missing or invalid | Set the correct `LLM_API_KEY` for your provider. |
+| Backend container exits immediately | `PORT` not injected or startup command missing | Confirm your host injects `PORT`; use the Uvicorn CMD shown above. |
+| Supabase auth redirect fails | Site URL and Redirect URLs not updated in Supabase dashboard | Update under Authentication → URL Configuration. |
+
+---
+
+### 28.10 Security Notes
+
+- **Never commit** `.env` files — both are git-ignored by `.gitignore`.
+- The **Supabase anon key** is safe to expose in frontend builds; it is subject to Row Level Security.
+- **Do not** expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code or any `VITE_*` variable.
+- **Do not** expose `LLM_API_KEY` in frontend code — it must only be set on the backend.
+- Use `.env.example` templates (placeholders only) for onboarding contributors.
+
+---
+
+## 29. Contributing
 
 Contributions to SciVerify are welcome:
 1. Fork the repository.
@@ -737,6 +966,7 @@ Contributions to SciVerify are welcome:
 
 ---
 
-## 29. License
+## 30. License
 
 This project is licensed under the [MIT License](LICENSE).
+

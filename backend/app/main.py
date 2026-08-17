@@ -18,7 +18,7 @@ from app.api.routes.papers import router as papers_router
 from app.api.routes.verification import router as verification_router
 
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
-BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
+BACKEND_PORT = int(os.getenv("PORT") or os.getenv("BACKEND_PORT", "8000"))
 
 
 def _get_cors_origins() -> list[str]:
@@ -54,6 +54,7 @@ app.include_router(evidence_router)
 app.include_router(verification_router)
 
 
-@app.get("/api/health")
+@app.get("/health", tags=["health"])
+@app.get("/api/health", tags=["health"])
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "sciverify-backend"}
