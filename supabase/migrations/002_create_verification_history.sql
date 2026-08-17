@@ -3,7 +3,7 @@
 --   supabase db push
 
 create table if not exists public.verification_history (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   claim text not null,
   doi text not null,
@@ -22,6 +22,7 @@ alter table public.verification_history enable row level security;
 
 drop policy if exists "Users can view own verification history" on public.verification_history;
 drop policy if exists "Users can insert own verification history" on public.verification_history;
+drop policy if exists "Users can update own verification history" on public.verification_history;
 drop policy if exists "Users can delete own verification history" on public.verification_history;
 
 create policy "Users can view own verification history"
@@ -34,7 +35,14 @@ create policy "Users can insert own verification history"
   for insert
   with check (auth.uid() = user_id);
 
+create policy "Users can update own verification history"
+  on public.verification_history
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
 create policy "Users can delete own verification history"
   on public.verification_history
   for delete
   using (auth.uid() = user_id);
+
