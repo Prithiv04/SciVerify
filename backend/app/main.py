@@ -19,7 +19,19 @@ from app.api.routes.verification import router as verification_router
 
 BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
 BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
+def _get_cors_origins() -> list[str]:
+    raw = os.getenv("ALLOWED_ORIGINS") or os.getenv("FRONTEND_URL") or "http://localhost:5173"
+    configured = [origin.strip() for origin in raw.split(",") if origin.strip()]
+    dev_defaults = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
+    return list(dict.fromkeys(configured + dev_defaults))
+
 
 app = FastAPI(
     title="SciVerify Backend",
@@ -29,7 +41,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=_get_cors_origins(),
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
