@@ -205,3 +205,24 @@ class TestVerificationApi:
         assert "429" in data["detail"]
         assert data["verdict"] is None
 
+    def test_health_endpoints(self) -> None:
+        for path in ["/health", "/api/health"]:
+            response = self.client.get(path)
+            assert response.status_code == 200
+            assert response.json() == {"status": "ok", "service": "sciverify-backend"}
+
+    def test_cors_headers(self) -> None:
+        response = self.client.options(
+            "/api/verification/analyze",
+            headers={
+                "Origin": "https://sciverify.vercel.app",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert response.status_code == 200
+        assert (
+            response.headers.get("access-control-allow-origin")
+            == "https://sciverify.vercel.app"
+        )
+
+

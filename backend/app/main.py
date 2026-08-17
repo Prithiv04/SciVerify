@@ -29,6 +29,7 @@ def _get_cors_origins() -> list[str]:
         "http://localhost:5174",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
+        "https://sciverify.vercel.app",
     ]
     return list(dict.fromkeys(configured + dev_defaults))
 
