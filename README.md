@@ -1,6 +1,6 @@
 # SciVerify
 
-### Evidence-Backed AI Scientific Claim Verification System
+## Evidence-Backed AI Scientific Claim Verification
 
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
